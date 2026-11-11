@@ -2,11 +2,7 @@ import { requestJSON } from './lib/api-client.js';
 import { ensureFrontmatterTags, extractMarkdownOutline, frontmatterLineOffset, highlightMarkdown, MarkdownEditor, parseFrontmatter } from './lib/markdown-editor.js';
 import { GraphView } from './lib/graph-view.js';
 import { highlightCode } from './lib/syntax-highlight.js';
-
-import { init as editorInit } from './lib/editor.js';
-import { init as searchInit } from './lib/search.js';
-import { init as navigationInit } from './lib/navigation.js';
-import { init as attachmentsInit } from './lib/attachments.js';
+import { getScrollSpacerHeight, mapEditorToPreview, mapPreviewToEditor } from './lib/scroll-sync.js';
 
 const pageSize = 30;
 const treePageSize = 100;
@@ -188,12 +184,6 @@ function updateSplitRatio() {
 }
 
 async function initialize() {
-    // Initialize modules
-    editorInit(elements, state);
-    searchInit();
-    navigationInit();
-    attachmentsInit();
-
     try {
         const response = await fetch('/api/auth/status');
         if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
@@ -207,6 +197,7 @@ async function initialize() {
         showMessage(`Não foi possível verificar o acesso: ${error.message}`, 'error');
         return;
     }
+    setupEventListeners();
     setupTheme();
     const savedPanelWidth = Number(localStorage.getItem('workspacePanelWidth'));
     if (Number.isFinite(savedPanelWidth) && savedPanelWidth > 0) workspacePanelWidth = savedPanelWidth;
@@ -2402,11 +2393,31 @@ function scrollToOutlineHeading(line) {
 
 function renderFolderPanel() {
     const scrollTop = elements.panel.scrollTop;
+    const rootRow = document.createElement('div');
+    rootRow.className = 'tree-root-row';
     const all = document.createElement('button');
     all.type = 'button';
     all.className = `tree-root${state.folder === '' ? ' is-selected' : ''}`;
     all.dataset.folder = '';
     all.textContent = 'Todas as notas';
+    const actions = document.createElement('div');
+    actions.className = 'tree-root-actions';
+    const createNote = document.createElement('button');
+    createNote.type = 'button';
+    createNote.className = 'icon-button tree-root-action';
+    createNote.dataset.createNote = '';
+    createNote.setAttribute('aria-label', 'Criar nota');
+    createNote.title = 'Criar nota';
+    createNote.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+    const createFolder = document.createElement('button');
+    createFolder.type = 'button';
+    createFolder.className = 'icon-button tree-root-action';
+    createFolder.dataset.createFolder = '';
+    createFolder.setAttribute('aria-label', 'Criar pasta');
+    createFolder.title = 'Criar pasta';
+    createFolder.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h6l2 2h9v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M16 11v6m-3-3h6"/></svg>';
+    actions.append(createNote, createFolder);
+    rootRow.append(all, actions);
     const root = document.createElement('section');
     root.className = 'tree-root-group';
     root.dataset.dropFolder = '';
@@ -2422,7 +2433,7 @@ function renderFolderPanel() {
     const tree = document.createElement('ul');
     tree.className = 'folder-tree root-folder-tree';
     for (const folder of state.folders) tree.append(buildFolderNode(folder));
-    elements.panelContent.replaceChildren(all, root, tree);
+    elements.panelContent.replaceChildren(rootRow, root, tree);
     elements.panel.scrollTop = scrollTop;
 }
 
@@ -2518,6 +2529,14 @@ function renderDirectNotes(folder, root) {
 }
 
 function handlePanelClick(event) {
+    if (event.target.closest('[data-create-note]')) {
+        void openNewNote();
+        return;
+    }
+    if (event.target.closest('[data-create-folder]')) {
+        void createFolder();
+        return;
+    }
     const outlineItem = event.target.closest('[data-outline-line]');
     if (outlineItem) {
         scrollToOutlineHeading(outlineItem.dataset.outlineLine);
@@ -2673,6 +2692,30 @@ async function refreshFolderTree() {
     await loadFolders();
     const folders = ['', ...state.expandedFolders].filter((folder, index, list) => list.indexOf(folder) === index);
     await Promise.all(folders.map(folder => loadFolderNotes(folder)));
+}
+
+async function createFolder() {
+    const name = window.prompt('Nome da pasta (use / para criar subpastas):');
+    if (name === null) return;
+    const folder = name.trim();
+    if (!folder) {
+        showMessage('Informe um nome para a pasta.', 'error');
+        return;
+    }
+    try {
+        await requestJSON('/api/folders', {
+            method: 'POST',
+            body: JSON.stringify({ path: folder })
+        });
+        const parts = folder.split('/');
+        for (let index = 1; index <= parts.length; index++) {
+            state.expandedFolders.add(parts.slice(0, index).join('/'));
+        }
+        void refreshFolderTree();
+        showMessage('Pasta criada.', 'success');
+    } catch (error) {
+        showMessage(`Não foi possível criar a pasta: ${error.message}`, 'error');
+    }
 }
 
 async function selectFolder(folder) {

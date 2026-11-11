@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -227,6 +228,31 @@ func TestNotesAPIAndPagination(t *testing.T) {
 		t.Fatalf("folder response = %d, body = %s", folderResponse.Code, folderResponse.Body.String())
 	}
 
+	createFolderResponse := httptest.NewRecorder()
+	handler.ServeHTTP(createFolderResponse, httptest.NewRequest(http.MethodPost, "/api/folders",
+		strings.NewReader(`{"path":"Empty/Child"}`)))
+	if createFolderResponse.Code != http.StatusCreated {
+		t.Fatalf("create folder status = %d, body = %s", createFolderResponse.Code, createFolderResponse.Body.String())
+	}
+	duplicateFolderResponse := httptest.NewRecorder()
+	handler.ServeHTTP(duplicateFolderResponse, httptest.NewRequest(http.MethodPost, "/api/folders",
+		strings.NewReader(`{"path":"Empty/Child"}`)))
+	if duplicateFolderResponse.Code != http.StatusConflict {
+		t.Fatalf("duplicate folder status = %d, body = %s",
+			duplicateFolderResponse.Code, duplicateFolderResponse.Body.String())
+	}
+	if err := app.CreateFolder("Work"); !errors.Is(err, ErrFolderExists) {
+		t.Fatalf("creating a folder over an existing note path error = %v, want ErrFolderExists", err)
+	}
+	folderTree, err := app.FolderTree()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(folderTree) != 2 || folderTree[0].Path != "Empty" ||
+		len(folderTree[0].Children) != 1 || folderTree[0].Children[0].Path != "Empty/Child" {
+		t.Fatalf("empty folder missing from folder tree: %#v", folderTree)
+	}
+
 	deleteRequest := httptest.NewRequest(http.MethodDelete, notePath, nil)
 	deleteResponse := httptest.NewRecorder()
 	handler.ServeHTTP(deleteResponse, deleteRequest)
@@ -239,6 +265,38 @@ func TestNotesAPIAndPagination(t *testing.T) {
 	handler.ServeHTTP(invalidResponse, invalidSearch)
 	if invalidResponse.Code != http.StatusBadRequest {
 		t.Fatalf("search without mode status = %d", invalidResponse.Code)
+	}
+}
+
+func TestCreatingAndMovingEmptyFolders(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	if err := app.CreateFolder("Projects/Ideas"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.CreateFolder("Projects/Ideas"); !errors.Is(err, ErrFolderExists) {
+		t.Fatalf("duplicate folder error = %v, want ErrFolderExists", err)
+	}
+	destination, moved, err := app.MoveFolder("Projects", "Archive")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if destination != "Archive/Projects" || moved != 0 {
+		t.Fatalf("move empty folder result = (%q, %d), want (%q, 0)", destination, moved, "Archive/Projects")
+	}
+	folders, err := app.FolderTree()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(folders) != 1 || folders[0].Path != "Archive" ||
+		len(folders[0].Children) != 1 || folders[0].Children[0].Path != "Archive/Projects" ||
+		len(folders[0].Children[0].Children) != 1 ||
+		folders[0].Children[0].Children[0].Path != "Archive/Projects/Ideas" {
+		t.Fatalf("moved empty folder tree = %#v", folders)
 	}
 }
 
@@ -269,6 +327,9 @@ func TestNotesWorkflowThroughHTTPAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	notePath := "/api/notes/" + strconv.FormatInt(note.ID, 10)
+	if err := app.CreateFolder("Empty/Archive"); err != nil {
+		t.Fatal(err)
+	}
 
 	updateResponse := send(http.MethodPut, notePath,
 		`{"title":"Workflow draft","content":"searchable second version","folder":"Projects","version":1}`)
@@ -304,6 +365,13 @@ func TestNotesWorkflowThroughHTTPAPI(t *testing.T) {
 	}
 	if counts["notes"] != 1 {
 		t.Fatalf("restore counts = %#v", counts)
+	}
+	folders, err := app.FolderTree()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(folders) != 2 || folders[0].Path != "Empty" || folders[1].Path != "Projects" {
+		t.Fatalf("restored folder tree = %#v", folders)
 	}
 	restoredResponse := send(http.MethodGet, notePath, "")
 	if restoredResponse.Code != http.StatusOK || !strings.Contains(restoredResponse.Body.String(), "searchable second version") {

@@ -34,6 +34,7 @@ type backupManifest struct {
 	Version     int                 `json:"version"`
 	CreatedAt   string              `json:"created_at"`
 	Notes       []backupNote        `json:"notes"`
+	Folders     []string            `json:"folders,omitempty"`
 	Versions    []backupNoteVersion `json:"versions,omitempty"`
 	Attachments []backupAttachment  `json:"attachments"`
 }
@@ -99,6 +100,26 @@ func (a *App) ExportBackup(destination io.Writer) error {
 			}
 		}
 		manifest.Notes = append(manifest.Notes, note)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	rows, err = a.db.Query("SELECT path FROM folders ORDER BY path")
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var folder string
+		if err := rows.Scan(&folder); err != nil {
+			rows.Close()
+			return err
+		}
+		manifest.Folders = append(manifest.Folders, folder)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -256,7 +277,13 @@ func (a *App) RestoreBackup(data []byte) (int, int, error) {
 	if _, err := tx.Exec("DELETE FROM notes"); err != nil {
 		return 0, 0, err
 	}
+	if _, err := tx.Exec("DELETE FROM folders"); err != nil {
+		return 0, 0, err
+	}
 	if err := insertRestoredNotes(tx, manifest.Notes); err != nil {
+		return 0, 0, err
+	}
+	if err := insertRestoredFolders(tx, manifest.Folders); err != nil {
 		return 0, 0, err
 	}
 	if err := insertRestoredVersions(tx, manifest.Versions); err != nil {
@@ -314,6 +341,18 @@ func readBackupArchive(data []byte) (backupManifest, map[string]*zip.File, error
 	}
 	if len(manifest.Notes) > maxBackupNotes {
 		return backupManifest{}, nil, fmt.Errorf("%w: too many notes", errInvalidBackup)
+	}
+
+	seenFolders := make(map[string]struct{}, len(manifest.Folders))
+	for index, folder := range manifest.Folders {
+		normalized, err := normalizeFolder(folder)
+		if err != nil || normalized != folder || folder == "" {
+			return backupManifest{}, nil, fmt.Errorf("%w: folder %d has an invalid path", errInvalidBackup, index)
+		}
+		if _, exists := seenFolders[folder]; exists {
+			return backupManifest{}, nil, fmt.Errorf("%w: duplicate folder %q", errInvalidBackup, folder)
+		}
+		seenFolders[folder] = struct{}{}
 	}
 
 	noteIDs := make(map[int64]struct{}, len(manifest.Notes))
@@ -423,6 +462,15 @@ func readBackupArchive(data []byte) (backupManifest, map[string]*zip.File, error
 		}
 	}
 	return manifest, files, nil
+}
+
+func insertRestoredFolders(tx *sql.Tx, folders []string) error {
+	for _, folder := range folders {
+		if err := insertFolderPath(tx, folder); err != nil {
+			return fmt.Errorf("restore folder %q: %w", folder, err)
+		}
+	}
+	return nil
 }
 
 func validStorageName(name string) bool {

@@ -1,6 +1,6 @@
 # PKM Notes
 
-Aplicação local de notas Markdown com backend Go, SQLite/FTS5 e interface responsiva. As pastas mostradas na navegação são caminhos virtuais armazenados no SQLite; o app não cria arquivos `.md` no disco.
+Aplicação local de notas Markdown com backend Go, SQLite/FTS5 e interface responsiva. As pastas são caminhos virtuais armazenados no SQLite; o app não cria arquivos `.md` no disco.
 
 ## Requisitos
 
@@ -46,7 +46,7 @@ Para ARM64, compile nativamente no dispositivo ou configure um compilador C cruz
 ## Recursos
 
 - Busca paginada por título ou conteúdo, com FTS5.
-- Árvore de pastas virtual com notas clicáveis dentro de cada pasta; os itens são carregados sob demanda em lotes e podem ser movidos por arrastar e soltar.
+- Árvore de pastas virtual com notas clicáveis dentro de cada pasta; crie notas e pastas pelos ícones ao lado de “Todas as notas”. Os itens são carregados sob demanda em lotes e podem ser movidos por arrastar e soltar.
 - Abrir notas pela árvore ou pelos cards de busca no painel principal, sem janela modal.
 - Criar, editar e excluir notas com salvamento automático no SQLite e restauração da pesquisa ao voltar; notas e pastas podem ser reorganizadas pelo explorador lateral.
 - Anexos enviados pelo editor ficam em `attachments/<id-da-nota>/` no diretório de dados, sem depender do caminho virtual da nota. O editor oferece upload, download e exclusão, insere links Markdown no conteúdo e pode mostrar imagens raster compatíveis no preview. O limite é 25 MiB por arquivo.
@@ -64,7 +64,7 @@ O preview usa Goldmark no backend. HTML bruto é mantido inativo e destinos com 
 
 ## Dados, anexos e backup
 
-- As notas, seus caminhos de pasta virtuais e metadados ficam em `notes.db` no diretório de dados. O índice de busca FTS5 e o índice de vínculos (`note_links`) são mantidos no mesmo banco. O grafo e os backlinks são resolvidos a partir desse índice, sem reler o conteúdo de todas as notas a cada consulta. O histórico de versões fica na tabela `note_versions` do mesmo banco.
+- As notas, pastas vazias e metadados ficam em `notes.db` no diretório de dados. Os caminhos das pastas associadas às notas também são mantidos nas próprias notas. O índice de busca FTS5 e o índice de vínculos (`note_links`) são mantidos no mesmo banco. O grafo e os backlinks são resolvidos a partir desse índice, sem reler o conteúdo de todas as notas a cada consulta. O histórico de versões fica na tabela `note_versions` do mesmo banco.
 - Anexos são gravados em `attachments/<id-da-nota>/` no mesmo diretório de dados. O nome físico é aleatório; o nome original e o tipo de mídia ficam nos metadados SQLite. Assim, mover a nota para outra pasta virtual não move nem quebra o arquivo.
 - Ao excluir uma nota, seus metadados de anexos são removidos pelo SQLite e os arquivos daquela nota são apagados do disco.
 - Use **Exportar** na barra superior para baixar um `.zip` com `manifest.json` e todos os anexos. **Importar** valida o arquivo e substitui notas, pastas, tags, histórico e anexos atuais; IDs de notas e anexos são preservados para que os links dentro do conteúdo continuem funcionando. A importação é tudo ou nada: um arquivo inválido não altera os dados existentes.
@@ -81,6 +81,7 @@ Ao anexar um arquivo pelo editor, uma imagem raster compatível é inserida como
 - `GET /api/search?q=...&mode=title|content&limit=30&offset=0&folder=...&tag=...`
 - `GET /api/tags` (nome e contagem de cada tag, sem diferenciar maiúsculas)
 - `GET /api/folders`
+- `POST /api/folders` com `{ "path": "Projetos/Ideias" }`
 - `POST /api/folders/move` com `{ "source": "Antiga", "target": "Arquivo" }`
 - `PATCH /api/notes/{id}/folder` com `{ "folder": "Projetos" }`
 - `GET /api/folder-notes?folder=Projetos&limit=100&offset=0` (inclua `folder=` para listar somente notas sem pasta)
@@ -98,7 +99,7 @@ O endpoint do grafo retorna `{ "nodes": [{ "id", "title", "folder" }], "edges": 
 
 Com autenticação habilitada, `POST /api/auth/login` recebe `{ "password": "..." }` em JSON e define o cookie de sessão; o navegador deve manter esse cookie nas chamadas seguintes. `GET /api/auth/status` informa se a autenticação está habilitada e se a sessão atual está autenticada.
 
-As pastas continuam virtuais: são valores no SQLite derivados das notas, não diretórios físicos. O editor é uma implementação própria; nenhum código-fonte do Basalt foi copiado.
+As pastas continuam virtuais: são valores no SQLite, não diretórios físicos. O editor é uma implementação própria; nenhum código-fonte do Basalt foi copiado.
 
 ## Testes
 

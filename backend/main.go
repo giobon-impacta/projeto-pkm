@@ -39,6 +39,7 @@ const (
 )
 
 var ErrVersionConflict = errors.New("note was modified by another session")
+var ErrFolderExists = errors.New("folder already exists")
 
 type Note struct {
 	ID        int64    `json:"id"`
@@ -179,6 +180,10 @@ func (a *App) migrate() error {
 			created_at TEXT NOT NULL DEFAULT (datetime('now')),
 			UNIQUE(note_id, storage_name)
 		)`,
+		`CREATE TABLE IF NOT EXISTS folders (
+			path TEXT PRIMARY KEY,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)`,
 		`CREATE INDEX IF NOT EXISTS idx_attachments_note ON attachments(note_id, id)`,
 	}
 	for _, statement := range baseSchema {
@@ -218,6 +223,22 @@ func (a *App) migrate() error {
 			return fmt.Errorf("record migration %d: %w", migration.version, err)
 		}
 		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func insertFolderPath(tx *sql.Tx, folder string) error {
+	parts := strings.Split(folder, "/")
+	current := ""
+	for _, part := range parts {
+		if current == "" {
+			current = part
+		} else {
+			current += "/" + part
+		}
+		if _, err := tx.Exec("INSERT OR IGNORE INTO folders(path) VALUES (?)", current); err != nil {
 			return err
 		}
 	}
@@ -697,13 +718,18 @@ func (a *App) MoveFolder(source, target string) (string, int64, error) {
 		return "", 0, err
 	}
 
-	var count int64
+	var count, folderCount int64
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM notes
 		WHERE folder = ? OR substr(folder, 1, length(?) + 1) = ? || '/'`,
 		source, source, source).Scan(&count); err != nil {
 		return "", 0, err
 	}
-	if count == 0 {
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM folders
+		WHERE path = ? OR substr(path, 1, length(?) + 1) = ? || '/'`,
+		source, source, source).Scan(&folderCount); err != nil {
+		return "", 0, err
+	}
+	if count == 0 && folderCount == 0 {
 		return "", 0, sql.ErrNoRows
 	}
 	var maxPathLength int
@@ -714,6 +740,32 @@ func (a *App) MoveFolder(source, target string) (string, int64, error) {
 	}
 	if maxPathLength > 1024 {
 		return "", 0, errors.New("destination would make a folder path exceed the 1024 byte limit")
+	}
+	rows, err := tx.Query(`SELECT path FROM folders
+		WHERE path = ? OR substr(path, 1, length(?) + 1) = ? || '/'`, source, source, source)
+	if err != nil {
+		return "", 0, err
+	}
+	folderPaths := make([]string, 0, folderCount)
+	for rows.Next() {
+		var folder string
+		if err := rows.Scan(&folder); err != nil {
+			rows.Close()
+			return "", 0, err
+		}
+		movedPath := destination + strings.TrimPrefix(folder, source)
+		if len([]byte(movedPath)) > 1024 {
+			rows.Close()
+			return "", 0, errors.New("destination would make a folder path exceed the 1024 byte limit")
+		}
+		folderPaths = append(folderPaths, movedPath)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return "", 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return "", 0, err
 	}
 	for _, note := range before {
 		if note.Folder == source || strings.HasPrefix(note.Folder, source+"/") {
@@ -727,6 +779,15 @@ func (a *App) MoveFolder(source, target string) (string, int64, error) {
 		WHERE folder = ? OR substr(folder, 1, length(?) + 1) = ? || '/'`,
 		destination, source, source, source, source); err != nil {
 		return "", 0, err
+	}
+	if _, err := tx.Exec(`DELETE FROM folders
+		WHERE path = ? OR substr(path, 1, length(?) + 1) = ? || '/'`, source, source, source); err != nil {
+		return "", 0, err
+	}
+	for _, folder := range folderPaths {
+		if err := insertFolderPath(tx, folder); err != nil {
+			return "", 0, err
+		}
 	}
 	after, err := readNotesForLinksWith(tx)
 	if err != nil {
@@ -860,7 +921,9 @@ func normalizeFolder(value string) (string, error) {
 }
 
 func (a *App) FolderTree() ([]Folder, error) {
-	rows, err := a.db.Query("SELECT DISTINCT folder FROM notes WHERE folder != '' ORDER BY folder")
+	rows, err := a.db.Query(`SELECT path FROM folders
+		UNION SELECT DISTINCT folder FROM notes WHERE folder != ''
+		ORDER BY 1`)
 	if err != nil {
 		return nil, err
 	}
@@ -1142,6 +1205,32 @@ func (a *App) handleSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleFolders(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var request struct {
+			Path string `json:"path"`
+		}
+		if err := decodeJSON(w, r, &request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		normalized, err := normalizeFolder(request.Path)
+		if err != nil || normalized != request.Path || normalized == "" {
+			http.Error(w, "path must be a non-empty normalized relative folder path", http.StatusBadRequest)
+			return
+		}
+		err = a.CreateFolder(normalized)
+		if errors.Is(err, ErrFolderExists) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		if err != nil {
+			log.Printf("create folder %q: %v", normalized, err)
+			http.Error(w, "failed to create folder", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]string{"path": normalized})
+		return
+	}
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
 		return
@@ -1153,6 +1242,33 @@ func (a *App) handleFolders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, folders)
+}
+
+func (a *App) CreateFolder(folder string) error {
+	normalized, err := normalizeFolder(folder)
+	if err != nil || normalized != folder || folder == "" {
+		return errors.New("folder path must be a non-empty normalized relative path")
+	}
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var exists int
+	if err := tx.QueryRow(`SELECT
+		EXISTS(SELECT 1 FROM folders WHERE path = ?) OR
+		EXISTS(SELECT 1 FROM notes
+			WHERE folder = ? OR substr(folder, 1, length(?) + 1) = ? || '/')`,
+		folder, folder, folder, folder).Scan(&exists); err != nil {
+		return err
+	}
+	if exists != 0 {
+		return ErrFolderExists
+	}
+	if err := insertFolderPath(tx, folder); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (a *App) handleTags(w http.ResponseWriter, r *http.Request) {

@@ -204,6 +204,12 @@ body.is-editor-view .main-content { display: flex; height: 100vh; min-height: 0;
 
 .tree-root { color: var(--text); font-weight: 600; }
 .settings-placeholder { margin: 8px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.tree-root-row { display: flex; align-items: center; gap: 4px; }
+.tree-root-row .tree-root { width: auto; min-width: 0; flex: 1; }
+.tree-root-actions { display: flex; flex: 0 0 auto; gap: 2px; }
+.tree-root-action { width: 26px; height: 26px; flex: 0 0 26px; color: var(--muted); font-size: 15px; }
+.tree-root-action svg { width: 15px; height: 15px; }
+.tree-root-action:hover { color: var(--accent); background: var(--surface-hover); }
 .tree-row { display: flex; align-items: center; gap: 2px; }
 .tree-folder { flex: 1; }
 .tree-folder::before { content: "▤"; margin-right: 6px; color: var(--accent); }
