@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ensureFrontmatterTags, extractMarkdownOutline, highlightMarkdown, indentSelection, MarkdownEditor, parseFrontmatter, stripFrontmatter } from './markdown-editor.js';
+import { ensureFrontmatterTags, extractMarkdownOutline, frontmatterLineOffset, highlightMarkdown, indentSelection, MarkdownEditor, parseFrontmatter, stripFrontmatter } from './markdown-editor.js';
 
 function createTextarea(value, start = 0, end = start) {
     return {
@@ -123,6 +123,12 @@ test('preserves existing frontmatter tags', () => {
 
 test('omits metadata frontmatter from the rendered Markdown body', () => {
     assert.equal(stripFrontmatter('---\ntags: pkm\n---\n\n# Note'), '# Note');
+});
+
+test('counts the lines removed with the frontmatter so body lines map back to the editor', () => {
+    assert.equal(frontmatterLineOffset('---\ntags: pkm\n---\n\n# Note'), 4);
+    assert.equal(frontmatterLineOffset('---\ntags:\n  - pkm\n  - notes\n---\n\n\nBody'), 7);
+    assert.equal(frontmatterLineOffset('# Note\n\nBody'), 0);
 });
 
 test('parses scalar and list frontmatter properties for the collapsible preview', () => {

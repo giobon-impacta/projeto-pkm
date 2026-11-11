@@ -337,6 +337,10 @@ export function stripFrontmatter(content) {
     return closeIndex < 0 ? content : lines.slice(closeIndex + 1).join('\n').replace(/^\s*\n/, '');
 }
 
+export function frontmatterLineOffset(content) {
+    return content.split('\n').length - stripFrontmatter(content).split('\n').length;
+}
+
 export function parseFrontmatter(content) {
     const lines = content.split('\n');
     if (lines[0]?.trim() !== '---') return null;
@@ -423,6 +427,6 @@ export function extractMarkdownOutline(content) {
     }
 
     if (inFrontmatter) return [];
-    const bodyLineOffset = lines.length - stripFrontmatter(content).split('\n').length;
+    const bodyLineOffset = frontmatterLineOffset(content);
     return outline.map(heading => ({ ...heading, bodyLine: heading.line - bodyLineOffset }));
 }

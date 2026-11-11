@@ -1,4 +1,4 @@
-import { ensureFrontmatterTags, extractMarkdownOutline, MarkdownEditor, parseFrontmatter, stripFrontmatter } from './lib/markdown-editor.js';
+import { ensureFrontmatterTags, extractMarkdownOutline, frontmatterLineOffset, MarkdownEditor, parseFrontmatter, stripFrontmatter } from './lib/markdown-editor.js';
 import { GraphView } from './lib/graph-view.js';
 import { getScrollSpacerHeight, mapEditorToPreview, mapPreviewToEditor } from './lib/scroll-sync.js';
 
@@ -179,8 +179,11 @@ async function initialize() {
     const savedPanelWidth = Number(localStorage.getItem('workspacePanelWidth'));
     if (Number.isFinite(savedPanelWidth) && savedPanelWidth > 0) workspacePanelWidth = savedPanelWidth;
     setWorkspacePanelWidth(workspacePanelWidth);
-    const savedSplit = Number(localStorage.getItem('editorSplitPercent'));
-    if (Number.isFinite(savedSplit)) editorSplitPercent = Math.min(80, Math.max(20, savedSplit));
+    const savedSplit = localStorage.getItem('editorSplitPercent');
+    if (savedSplit !== null) {
+        const splitPercent = Number(savedSplit);
+        if (Number.isFinite(splitPercent)) editorSplitPercent = Math.min(80, Math.max(20, splitPercent));
+    }
     updateSplitRatio();
     if (window.matchMedia('(max-width: 700px)').matches) closePanel();
     const initialListState = captureListState();
@@ -359,6 +362,12 @@ function setupEventListeners() {
         if (state.wikilinkAutocomplete.open) renderWikilinkAutocomplete();
     });
     elements.markdownPreview.addEventListener('scroll', () => handleEditorScroll(elements.markdownPreview));
+    // Images load after the first preview render and change its scroll height;
+    // recompute the spacer so the panes keep matching scroll ranges.
+    elements.markdownPreview.addEventListener('load', () => {
+        syncPreviewMinimumHeight();
+        syncEditorScrollFromSource();
+    }, true);
     window.addEventListener('resize', () => {
         editorLinePositionCache = null;
         if (state.view === 'editor' && window.matchMedia('(max-width: 700px)').matches &&
@@ -1958,20 +1967,25 @@ function measureEditorLines(markdown, lines) {
 }
 
 function getScrollLandmarks() {
-    const markdown = stripFrontmatter(elements.noteContent.value);
+    const content = elements.noteContent.value;
+    const markdown = stripFrontmatter(content);
     if (renderedPreviewMarkdown !== markdown) return [];
     const editor = elements.noteContent;
     const preview = elements.markdownPreview;
     const editorScrollable = Math.max(0, editor.scrollHeight - editor.clientHeight);
     const previewScrollable = Math.max(0, preview.scrollHeight - preview.clientHeight);
     if (!editorScrollable || !previewScrollable) return [];
+    // Preview source lines are relative to the stripped body, but the editor
+    // textarea still contains the frontmatter, so the measured line tops need
+    // to be shifted by the removed lines to match the real editor scroll.
+    const sourceLineOffset = frontmatterLineOffset(content);
     const sourceLines = [...elements.markdownPreview.querySelectorAll('[data-source-line]')]
         .map(element => Number(element.dataset.sourceLine));
-    const positions = measureEditorLines(markdown, sourceLines);
+    const positions = measureEditorLines(content, sourceLines.map(line => line + sourceLineOffset));
     const previewRect = preview.getBoundingClientRect();
     return [...elements.markdownPreview.querySelectorAll('[data-source-line]')]
         .map(element => {
-            const sourceY = positions.get(Number(element.dataset.sourceLine));
+            const sourceY = positions.get(Number(element.dataset.sourceLine) + sourceLineOffset);
             const previewTop = element.getBoundingClientRect().top - previewRect.top + preview.scrollTop;
             return {
                 editorPct: Number.isFinite(sourceY) ? sourceY / editorScrollable : NaN,
