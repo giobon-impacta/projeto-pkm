@@ -220,7 +220,6 @@ body.panel-open .main-content { margin-left: 338px; }
 .brand-dot { width: 9px; height: 9px; border-radius: 50%; }
 .topbar h1 { margin: 0; font-size: 15px; font-weight: 700; }
 .breadcrumb { overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.topbar .breadcrumb { display: none; }
 .breadcrumb::before { content: "/"; margin-right: 11px; color: var(--faint); }
 .topbar-actions, .footer-actions { display: flex; align-items: center; gap: 8px; }
 
@@ -303,6 +302,33 @@ body.panel-open .main-content { margin-left: 338px; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 20px 0; }
 .pagination span { min-width: 90px; color: var(--muted); text-align: center; font-size: 12px; }
 .pagination .button { min-height: 32px; }
+.graph-view { display: flex; min-height: calc(100vh - 118px); flex-direction: column; padding-top: 20px; }
+.graph-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.graph-header h2 { margin: 0; font-size: 18px; }
+.graph-header p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+.graph-actions { display: flex; align-items: center; gap: 8px; }
+.graph-actions input { width: min(230px, 30vw); height: 36px; border: 1px solid var(--border); border-radius: 7px; padding: 0 10px; outline: 0; color: var(--text); background: var(--surface); font-size: 12px; }
+.graph-actions input:focus { border-color: var(--accent); }
+.graph-legend { display: flex; min-height: 38px; align-items: center; gap: 16px; color: var(--muted); font-size: 11px; }
+.graph-legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.graph-legend-line { width: 20px; border-top: 2px solid #70a7ff; }
+.graph-legend-line.is-wikilink { border-top-style: dashed; border-color: #b28aff; }
+.graph-hint { margin-left: auto; color: var(--faint); }
+.graph-stage { position: relative; min-height: 360px; flex: 1; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: radial-gradient(circle at center, var(--surface-raised), var(--surface) 75%); }
+.graph-canvas { display: block; width: 100%; height: 100%; min-height: 360px; touch-action: none; cursor: grab; }
+.graph-canvas:active { cursor: grabbing; }
+.graph-edge { stroke: #70a7ff; stroke-opacity: .55; stroke-width: 1.5; }
+.graph-edge.is-wikilink { stroke: #b28aff; stroke-dasharray: 5 4; }
+.graph-edge.is-highlighted { stroke-opacity: .95; stroke-width: 2.5; }
+.graph-edge.is-dimmed { stroke-opacity: .08; }
+.graph-arrowhead { fill: #70a7ff; }
+.graph-node { cursor: pointer; outline: none; transition: opacity .16s ease; }
+.graph-node.is-dimmed { opacity: .14; }
+.graph-node-shape { fill: var(--surface-raised); stroke: var(--border); stroke-width: 1.3; }
+.graph-node:hover .graph-node-shape, .graph-node:focus-visible .graph-node-shape, .graph-node.is-selected .graph-node-shape { stroke: var(--accent); stroke-width: 2; }
+.graph-node.is-neighbor .graph-node-shape { stroke: color-mix(in srgb, var(--accent) 70%, var(--border)); }
+.graph-node-dot { fill: var(--accent); }
+.graph-node-label { fill: var(--text); font-size: 11px; pointer-events: none; }
 .app-message { position: fixed; right: 20px; bottom: 20px; z-index: 50; max-width: min(480px, calc(100vw - 40px)); color: var(--muted); font-size: 13px; }
 .app-message.is-error { padding: 11px 14px; border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border)); border-radius: 8px; color: var(--danger); background: var(--surface-raised); }
 .app-message.is-success { padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface-raised); }
@@ -312,6 +338,11 @@ body.panel-open .main-content { margin-left: 338px; }
 .editor-header { min-height: 50px; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .editor-header .title-field { min-width: 0; flex: 1; }
 .editor-header-actions, .editor-toolbar-right { display: flex; align-items: center; gap: 10px; }
+.attachments-panel { display: grid; gap: 5px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.attachments-heading { display: flex; align-items: center; justify-content: space-between; }
+.attachment-list { display: flex; flex-wrap: wrap; gap: 5px 12px; margin: 0; padding: 0; list-style: none; }
+.attachment-list a { overflow: hidden; max-width: min(320px, 70vw); color: var(--accent); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-remove { border: 0; padding: 2px 4px; color: var(--danger); background: transparent; cursor: pointer; font-size: 11px; }
 .pane-label { color: var(--muted); font-size: 11px; font-weight: 600; }
 .title-field { width: 100%; height: 38px; border: 0; border-radius: 5px; padding: 0 6px; outline: 0; color: var(--text); background: transparent; font-size: 18px; font-weight: 650; }
 .title-field:focus { background: var(--surface-hover); }
@@ -384,7 +415,8 @@ body.is-resizing-editor { cursor: col-resize; user-select: none; }
         border-right: 0;
     }
 
-    .brand-mark, .rail-spacer { display: none; }
+    .brand-mark { display: grid; margin: 0; }
+    .rail-spacer { display: none; }
     .rail-button { width: 42px; height: 42px; }
     .workspace-panel { inset: auto 0 60px; width: 100%; max-height: min(62vh, 500px); border-right: 0; border-top: 1px solid var(--border); border-radius: 12px 12px 0 0; box-shadow: 0 -14px 36px #0005; }
     .main-content, body.panel-open .main-content { min-height: calc(100vh - 60px); margin: 0 0 60px; padding: 0 16px 30px; }
@@ -394,6 +426,14 @@ body.is-resizing-editor { cursor: col-resize; user-select: none; }
     .breadcrumb::before { margin-right: 7px; }
     .topbar-actions .button { min-height: 34px; padding: 0 9px; font-size: 11px; }
     .search-area { margin-top: 22px; }
+    .graph-view { min-height: calc(100vh - 165px); padding-top: 14px; }
+    .graph-header { align-items: flex-start; flex-direction: column; gap: 12px; }
+    .graph-header h2 { font-size: 16px; }
+    .graph-actions { width: 100%; }
+    .graph-actions input { min-width: 0; flex: 1; }
+    .graph-legend { flex-wrap: wrap; gap: 8px 14px; padding: 8px 0; }
+    .graph-hint { width: 100%; margin-left: 0; white-space: normal !important; }
+    .graph-stage, .graph-canvas { min-height: 340px; }
     .search-box { min-height: 44px; }
     .note-card { grid-template-columns: minmax(0, 1fr) auto; gap: 9px; padding: 8px 10px; }
     .note-meta { grid-column: 1; grid-row: 2; }

@@ -11,6 +11,8 @@ usage() {
 Usage: ./run.sh [--data-dir PATH] [--port PORT]
   --data-dir  Directory for SQLite notes (default: ./data)
   --port      HTTP port (default: 8000, or PORT environment variable)
+  Set AUTHENTICATION_PASSWORD to require login. Behind a TLS proxy, also set
+  AUTHENTICATION_COOKIE_SECURE=true.
   --help      Show this help
 
 An existing PKM Notes process listening on the selected port is stopped before

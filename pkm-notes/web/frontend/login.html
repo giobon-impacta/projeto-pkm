@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b0d12">
+    <title>Entrar · PKM Notes</title>
+    <style>
+        :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #0b0d12; color: #e7eaf0; }
+        * { box-sizing: border-box; }
+        body { display: grid; min-height: 100vh; margin: 0; place-items: center; padding: 20px; }
+        form { display: grid; width: min(100%, 360px); gap: 14px; padding: 26px; border: 1px solid #282e3a; border-radius: 12px; background: #11141b; }
+        h1 { margin: 0; font-size: 20px; }
+        label { display: grid; gap: 7px; color: #8b95a8; font-size: 13px; }
+        input { min-height: 40px; border: 1px solid #282e3a; border-radius: 7px; padding: 0 10px; outline: 0; color: #e7eaf0; background: #0b0d12; font: inherit; }
+        input:focus { border-color: #70a7ff; }
+        button { min-height: 40px; border: 0; border-radius: 7px; color: #fff; background: #4b83e5; font: inherit; font-weight: 600; cursor: pointer; }
+        button:disabled { opacity: .6; cursor: wait; }
+        #message { min-height: 18px; margin: 0; color: #f27b82; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <form id="loginForm">
+        <h1>Entrar no PKM Notes</h1>
+        <label for="password">Senha
+            <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+        </label>
+        <button type="submit">Entrar</button>
+        <p id="message" role="status" aria-live="polite"></p>
+    </form>
+    <script>
+        const form = document.querySelector('#loginForm');
+        const password = document.querySelector('#password');
+        const message = document.querySelector('#message');
+        fetch('/api/auth/status')
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return response.json();
+            })
+            .then(status => {
+                if (!status.enabled || status.authenticated) location.replace('/');
+            })
+            .catch(error => { message.textContent = `Não foi possível verificar o acesso: ${error.message}`; });
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            message.textContent = '';
+            form.querySelector('button').disabled = true;
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: password.value })
+                });
+                if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
+                location.replace('/');
+            } catch (error) {
+                message.textContent = error.message;
+                password.focus();
+            } finally {
+                form.querySelector('button').disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,4 +1,5 @@
 import { ensureFrontmatterTags, highlightMarkdown, MarkdownEditor, stripFrontmatter } from './lib/markdown-editor.js';
+import { GraphView } from './lib/graph-view.js';
 import { mapEditorToPreview, mapPreviewToEditor } from './lib/scroll-sync.js';
 
 const pageSize = 30;
@@ -15,6 +16,9 @@ const state = {
     folderNotesGeneration: 0,
     expandedFolders: new Set(['']),
     view: 'list',
+    graphVisible: false,
+    graphData: null,
+    graphRequestID: 0,
     noteID: null,
     noteFolder: '',
     savedDraft: null,
@@ -30,6 +34,7 @@ let editorSplitPercent = 50;
 
 const elements = {
     searchView: document.querySelector('#searchView'),
+    graphView: document.querySelector('#graphView'),
     editorView: document.querySelector('#editorView'),
     searchInput: document.querySelector('#searchInput'),
     notesList: document.querySelector('#notesList'),
@@ -65,8 +70,14 @@ const markdownEditor = new MarkdownEditor(elements.noteContent, () => {
     updateHighlight();
     scheduleSave();
 }, updateEditorHistoryButtons);
+const graphView = new GraphView(document.querySelector('#noteGraph'), id => void openNote(id));
+document.querySelector('#graphButton').addEventListener('click', () => {
+    void openGraphView().catch(error => {
+        showMessage(`Não foi possível abrir o grafo: ${error.message}`, 'error');
+    });
+});
 
-document.addEventListener('DOMContentLoaded', initialize);
+document.addEventListener('DOMContentLoaded', () => void initialize());
 
 function startSplitResize(event) {
     if (event.button !== 0 || !window.matchMedia('(min-width: 701px)').matches) return;
@@ -109,9 +120,22 @@ function updateSplitRatio() {
     splitter.setAttribute('aria-valuenow', String(Math.round(editorSplitPercent)));
 }
 
-function initialize() {
-    setupTheme();
+async function initialize() {
     setupEventListeners();
+    try {
+        const response = await fetch('/api/auth/status');
+        if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
+        const auth = await response.json();
+        document.querySelector('#logoutButton').hidden = !auth.enabled;
+        if (!auth.authenticated) {
+            location.replace('/login.html');
+            return;
+        }
+    } catch (error) {
+        showMessage(`Não foi possível verificar o acesso: ${error.message}`, 'error');
+        return;
+    }
+    setupTheme();
     const savedSplit = Number(localStorage.getItem('editorSplitPercent'));
     if (Number.isFinite(savedSplit)) editorSplitPercent = Math.min(80, Math.max(20, savedSplit));
     updateSplitRatio();
@@ -138,11 +162,37 @@ function setupEventListeners() {
     });
     document.querySelector('#homeButton').addEventListener('click', () => {
         if (state.view === 'editor') navigateBack();
+        else if (state.graphVisible) closeGraphView();
         else elements.searchInput.focus();
     });
     document.querySelector('#closePanel').addEventListener('click', closePanel);
+    document.querySelector('#closeGraph').addEventListener('click', closeGraphView);
+    document.querySelector('#fitGraph').addEventListener('click', () => graphView.fit());
+    document.querySelector('#graphSearch').addEventListener('input', event => graphView.setSearch(event.target.value));
     elements.newNote.addEventListener('click', () => openNewNote());
     elements.deleteCurrentNote.addEventListener('click', deleteCurrentNote);
+    document.querySelector('#logoutButton').addEventListener('click', async () => {
+        try {
+            const response = await fetch('/api/auth/logout', { method: 'POST' });
+            if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
+            location.replace('/login.html');
+        } catch (error) {
+            showMessage(`Não foi possível encerrar a sessão: ${error.message}`, 'error');
+        }
+    });
+    document.querySelector('#addAttachment').addEventListener('click', async () => {
+        if (!(await flushSave())) return;
+        document.querySelector('#attachmentInput').click();
+    });
+    document.querySelector('#attachmentInput').addEventListener('change', event => {
+        const files = [...event.target.files];
+        event.target.value = '';
+        if (files.length) void uploadAttachments(files);
+    });
+    document.querySelector('#attachmentList').addEventListener('click', event => {
+        const button = event.target.closest('[data-delete-attachment]');
+        if (button) void deleteAttachment(Number(button.dataset.deleteAttachment));
+    });
     document.querySelector('#themeToggle').addEventListener('click', toggleTheme);
     document.querySelector('#clearFolder').addEventListener('click', () => selectFolder(''));
     elements.searchInput.addEventListener('input', () => {
@@ -211,7 +261,22 @@ function setupEventListeners() {
     document.addEventListener('keydown', event => {
         if (event.key === '/' && state.view === 'list' && !isTypingTarget(event.target)) {
             event.preventDefault();
-            elements.searchInput.focus();
+            (state.graphVisible ? document.querySelector('#graphSearch') : elements.searchInput).focus();
+        }
+        if ((event.ctrlKey || event.metaKey) && event.altKey && !event.shiftKey && state.view === 'editor') {
+            const mobile = window.matchMedia('(max-width: 700px)').matches;
+            const modes = mobile ? ['edit', 'preview'] : ['edit', 'split', 'preview'];
+            let mode = null;
+            if (event.code === 'Digit1') mode = 'edit';
+            else if (event.code === 'Digit2') mode = mobile ? 'edit' : 'split';
+            else if (event.code === 'Digit3') mode = 'preview';
+            else if (event.key.toLowerCase() === 'v') {
+                mode = modes[(modes.indexOf(elements.editorWorkspace.dataset.editorMode) + 1) % modes.length];
+            }
+            if (mode) {
+                event.preventDefault();
+                setEditorMode(mode);
+            }
         }
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') {
             event.preventDefault();
@@ -219,6 +284,9 @@ function setupEventListeners() {
         }
         if (state.view === 'editor' && event.key === 'Escape' && !event.defaultPrevented) {
             navigateBack();
+        }
+        if (state.view === 'list' && state.graphVisible && event.key === 'Escape' && !event.defaultPrevented) {
+            closeGraphView();
         }
     });
 }
@@ -233,7 +301,8 @@ function captureListState() {
         query: elements.searchInput.value,
         mode: state.mode,
         folder: state.folder,
-        offset: state.offset
+        offset: state.offset,
+        graphVisible: state.graphVisible
     };
 }
 
@@ -241,6 +310,76 @@ function updateListHistory() {
     if (state.view === 'list') {
         history.replaceState({ view: 'list', list: captureListState() }, '', location.href);
     }
+}
+
+async function openGraphView() {
+    if (state.view === 'editor') {
+        if (!(await flushSave())) {
+            showMessage('Salve a nota antes de abrir o grafo.', 'error');
+            return;
+        }
+        const listState = state.listState || captureListState();
+        history.pushState({ view: 'list', list: { ...listState, graphVisible: true } }, '', location.pathname);
+        state.view = 'list';
+        state.noteID = null;
+        state.directEntry = false;
+        elements.editorView.hidden = true;
+        elements.newNote.hidden = false;
+        restoreListState({ ...listState, graphVisible: false });
+        void loadNotes();
+    }
+    if (state.view !== 'list') return;
+    state.graphVisible = true;
+    elements.searchView.hidden = true;
+    elements.graphView.hidden = false;
+    const graphButton = document.querySelector('#graphButton');
+    graphButton.classList.add('is-active');
+    graphButton.setAttribute('aria-pressed', 'true');
+    updateListHistory();
+    requestAnimationFrame(() => graphView.resize());
+    if (state.graphData) {
+        graphView.setGraph(state.graphData);
+        updateGraphSummary(state.graphData);
+        return;
+    }
+
+    const requestID = ++state.graphRequestID;
+    const summary = document.querySelector('#graphSummary');
+    summary.textContent = 'Carregando relações…';
+    try {
+        const graph = await requestJSON('/api/graph');
+        if (requestID !== state.graphRequestID || !state.graphVisible) return;
+        if (!Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
+            throw new Error('Resposta inválida da API do grafo.');
+        }
+        state.graphData = graph;
+        graphView.setGraph(graph);
+        updateGraphSummary(graph);
+        requestAnimationFrame(() => graphView.fit());
+    } catch (error) {
+        if (requestID !== state.graphRequestID) return;
+        summary.textContent = 'Não foi possível carregar as relações.';
+        showMessage(`Não foi possível carregar o grafo: ${error.message}`, 'error');
+    }
+}
+
+function closeGraphView() {
+    if (!state.graphVisible) return;
+    state.graphVisible = false;
+    state.graphRequestID++;
+    elements.graphView.hidden = true;
+    elements.searchView.hidden = false;
+    const graphButton = document.querySelector('#graphButton');
+    graphButton.classList.remove('is-active');
+    graphButton.setAttribute('aria-pressed', 'false');
+    updateListHistory();
+}
+
+function updateGraphSummary(graph) {
+    const nodeCount = graph.nodes.length;
+    const edgeCount = graph.edges.length;
+    document.querySelector('#graphSummary').textContent =
+        `${nodeCount} ${nodeCount === 1 ? 'nota' : 'notas'} · ${edgeCount} ${edgeCount === 1 ? 'relação' : 'relações'}`;
 }
 
 function updateSearchModes() {
@@ -267,6 +406,10 @@ async function loadNotes() {
     try {
         const page = await requestJSON(`${endpoint}?${params}`);
         if (requestID !== state.requestID) return;
+        if (page.total > 0 && state.offset >= page.total) {
+            state.offset = Math.floor((page.total - 1) / pageSize) * pageSize;
+            return loadNotes();
+        }
         state.notes = page.items;
         state.total = page.total;
         renderNotes(page);
@@ -447,14 +590,18 @@ async function openNote(id, { push = true } = {}) {
 
 function showEditor(note) {
     window.clearTimeout(state.saveTimer);
+    if (window.matchMedia('(max-width: 700px)').matches) closePanel();
     state.view = 'editor';
     state.noteID = note?.id ?? null;
     elements.searchView.hidden = true;
+    elements.graphView.hidden = true;
     elements.editorView.hidden = false;
     elements.newNote.hidden = true;
     elements.noteTitle.value = note?.title || '';
     state.noteFolder = note ? note.folder : state.folder;
     elements.deleteCurrentNote.hidden = !note;
+    document.querySelector('#attachmentsPanel').hidden = !note;
+    document.querySelector('#attachmentList').replaceChildren();
     elements.saveStatus.className = 'save-status';
     elements.saveStatus.textContent = note ? 'Salvo' : 'Rascunho';
     const content = note ? ensureFrontmatterTags(note.content, note.tags || []) : '';
@@ -463,10 +610,12 @@ function showEditor(note) {
     elements.noteContent.value = content;
     state.savedDraft = getDraft();
     markdownEditor.setValue(content);
-    setEditorMode('split');
+    const savedMode = localStorage.getItem('editorMode');
+    setEditorMode(['edit', 'split', 'preview'].includes(savedMode) ? savedMode : 'split');
     updatePreview();
     elements.noteContent.focus();
     document.querySelector('#currentFolder').textContent = note ? (note.folder || 'Sem pasta') : (state.folder || 'Nova nota');
+    if (note) void loadAttachments(note.id);
 }
 
 function getDraft() {
@@ -515,9 +664,12 @@ async function persistDraft() {
     const job = (async () => {
         try {
             const saved = await requestJSON(endpoint, { method, body: JSON.stringify(note) });
+            state.graphData = null;
             if (id === null) {
                 state.noteID = saved.id;
                 elements.deleteCurrentNote.hidden = false;
+                document.querySelector('#attachmentsPanel').hidden = false;
+                void loadAttachments(saved.id);
                 const current = history.state || {};
                 history.replaceState({ ...current, view: 'editor', noteId: saved.id, list: state.listState }, '', `?note=${saved.id}`);
             }
@@ -574,6 +726,103 @@ function setSaveStatus(message, stateName) {
     elements.saveStatus.className = `save-status${stateName ? ` is-${stateName}` : ''}`;
 }
 
+async function loadAttachments(noteID) {
+    try {
+        const attachments = await requestJSON(`/api/notes/${noteID}/attachments`);
+        if (state.noteID === noteID) renderAttachments(attachments, noteID);
+    } catch (error) {
+        if (state.noteID === noteID) showMessage(`Não foi possível carregar os anexos: ${error.message}`, 'error');
+    }
+}
+
+function renderAttachments(attachments, noteID) {
+    const list = document.querySelector('#attachmentList');
+    list.replaceChildren();
+    for (const attachment of attachments) {
+        const item = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = attachment.url;
+        link.textContent = `${attachment.filename} (${formatFileSize(attachment.size)})`;
+        link.title = attachment.filename;
+        const remove = document.createElement('button');
+        remove.className = 'attachment-remove';
+        remove.type = 'button';
+        remove.dataset.deleteAttachment = String(attachment.id);
+        remove.dataset.noteId = String(noteID);
+        remove.setAttribute('aria-label', `Excluir anexo ${attachment.filename}`);
+        remove.textContent = '×';
+        item.append(link, remove);
+        list.append(item);
+    }
+}
+
+function formatFileSize(size) {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function uploadAttachments(files) {
+    if (!(await flushSave()) || state.noteID === null) return;
+    const noteID = state.noteID;
+    for (const file of files) {
+        const form = new FormData();
+        form.append('file', file, file.name);
+        try {
+            const response = await fetch(`/api/notes/${noteID}/attachments`, { method: 'POST', body: form });
+            if (response.status === 401) {
+                location.replace('/login.html');
+                return;
+            }
+            if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
+            const attachment = await response.json();
+            if (state.noteID === noteID) {
+                insertAttachmentMarkdown(attachment);
+                await loadAttachments(noteID);
+            }
+        } catch (error) {
+            showMessage(`Não foi possível enviar ${file.name}: ${error.message}`, 'error');
+            return;
+        }
+    }
+    if (state.noteID === noteID) await flushSave();
+}
+
+function insertAttachmentMarkdown(attachment) {
+    const textarea = elements.noteContent;
+    const label = attachment.filename.replace(/[\r\n]/g, ' ').replaceAll('\\', '\\\\').replaceAll('[', '\\[').replaceAll(']', '\\]');
+    const inlineImage = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'].includes(attachment.media_type);
+    const destination = `${attachment.url}${inlineImage ? '?inline=1' : ''}`;
+    const markdown = inlineImage ? `![${label}](${destination})` : `[${label}](${destination})`;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = textarea.value.slice(0, start);
+    const after = textarea.value.slice(end);
+    const prefix = before && !/\s$/.test(before) ? '\n' : '';
+    const suffix = after && !/^\s/.test(after) ? '\n' : '';
+    const next = `${before}${prefix}${markdown}${suffix}${after}`;
+    const cursor = before.length + prefix.length + markdown.length + suffix.length;
+    textarea.value = next;
+    textarea.focus();
+    textarea.setSelectionRange(cursor, cursor);
+    markdownEditor.handleInput();
+}
+
+async function deleteAttachment(attachmentID) {
+    const noteID = state.noteID;
+    if (noteID === null) return;
+    const button = document.querySelector(`[data-delete-attachment="${attachmentID}"]`);
+    const filename = button?.previousElementSibling?.textContent || 'este anexo';
+    if (!window.confirm(`Excluir ${filename}? Essa ação não pode ser desfeita.`)) return;
+    try {
+        await requestJSON(`/api/notes/${noteID}/attachments/${attachmentID}`, { method: 'DELETE' });
+        await loadAttachments(noteID);
+        showMessage('Anexo excluído.', 'success');
+    } catch (error) {
+        showMessage(`Não foi possível excluir o anexo: ${error.message}`, 'error');
+    }
+}
+
 function navigateBack() {
     if (state.view !== 'editor') return;
     if (state.directEntry) {
@@ -592,7 +841,8 @@ async function returnToList(listState, replace = false) {
     state.directEntry = false;
     restoreListState(target);
     elements.editorView.hidden = true;
-    elements.searchView.hidden = false;
+    elements.graphView.hidden = !state.graphVisible;
+    elements.searchView.hidden = state.graphVisible;
     elements.newNote.hidden = false;
     await loadNotes();
     if (elements.panel.dataset.panel === 'search') elements.searchInput.focus();
@@ -603,6 +853,19 @@ function restoreListState(listState) {
     state.mode = listState.mode || 'title';
     state.folder = listState.folder || '';
     state.offset = listState.offset || 0;
+    state.graphVisible = Boolean(listState.graphVisible);
+    elements.graphView.hidden = !state.graphVisible;
+    elements.searchView.hidden = state.graphVisible;
+    const graphButton = document.querySelector('#graphButton');
+    graphButton.classList.toggle('is-active', state.graphVisible);
+    graphButton.setAttribute('aria-pressed', String(state.graphVisible));
+    if (state.graphVisible && state.graphData) {
+        graphView.setGraph(state.graphData);
+        updateGraphSummary(state.graphData);
+        requestAnimationFrame(() => graphView.resize());
+    } else if (state.graphVisible) {
+        void openGraphView();
+    }
     updateSearchModes();
     document.querySelector('#currentFolder').textContent = state.folder || 'Todas as notas';
 }
@@ -633,11 +896,12 @@ async function handlePopState(event) {
     }
     state.listState = target.list || state.listState;
     state.directEntry = false;
-    restoreListState(state.listState || {});
     state.view = 'list';
+    restoreListState(state.listState || {});
     state.noteID = null;
     elements.editorView.hidden = true;
-    elements.searchView.hidden = false;
+    elements.graphView.hidden = !state.graphVisible;
+    elements.searchView.hidden = state.graphVisible;
     elements.newNote.hidden = false;
     await loadNotes();
     if (elements.panel.dataset.panel === 'search') elements.searchInput.focus();
@@ -647,7 +911,10 @@ async function deleteCurrentNote() {
     if (state.noteID === null) return;
     if (!window.confirm(`Excluir “${elements.noteTitle.value}”? Essa ação não pode ser desfeita.`)) return;
     try {
+        window.clearTimeout(state.saveTimer);
+        if (state.savePromise) await state.savePromise;
         await requestJSON(`/api/notes/${state.noteID}`, { method: 'DELETE' });
+        state.graphData = null;
         state.savedDraft = getDraft();
         showMessage('Nota excluída.', 'success');
         state.noteID = null;
@@ -665,14 +932,29 @@ async function deleteNote(id) {
     const note = state.notes.find(item => item.id === id) ||
         [...state.folderNotes.values()].flatMap(page => page.items).find(item => item.id === id);
     if (!window.confirm(`Excluir “${note?.title || 'esta nota'}”? Essa ação não pode ser desfeita.`)) return;
+    const deletingCurrent = state.view === 'editor' && state.noteID === id;
     try {
+        if (deletingCurrent) {
+            window.clearTimeout(state.saveTimer);
+            if (state.savePromise) await state.savePromise;
+        }
         await requestJSON(`/api/notes/${id}`, { method: 'DELETE' });
-        state.total = Math.max(0, state.total - 1);
-        if (state.offset > 0 && state.offset >= state.total) state.offset = Math.max(0, state.offset - pageSize);
+        state.graphData = null;
         showMessage('Nota excluída.', 'success');
-        await Promise.all([loadNotes(), loadFolders()]);
         state.folderNotesGeneration++;
         state.folderNotes.clear();
+        if (deletingCurrent) {
+            state.savedDraft = getDraft();
+            state.noteID = null;
+            if (state.directEntry) await returnToList(state.listState || captureListState(), true);
+            else history.back();
+            void Promise.all([loadFolders(), loadNotes()]);
+            void loadFolderNotes('', false);
+            return;
+        }
+        state.total = Math.max(0, state.total - 1);
+        if (state.offset > 0 && state.offset >= state.total) state.offset = Math.max(0, state.offset - pageSize);
+        await Promise.all([loadNotes(), loadFolders()]);
         await loadFolderNotes('', false);
     } catch (error) {
         showMessage(`Não foi possível excluir a nota: ${error.message}`, 'error');
@@ -697,6 +979,10 @@ function updatePreview() {
                 headers: { 'Content-Type': 'text/plain; charset=utf-8' },
                 body: markdown
             });
+            if (response.status === 401) {
+                location.replace('/login.html');
+                return;
+            }
             if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
             const html = await response.text();
             if (requestID === previewRequestID) {
@@ -940,11 +1226,13 @@ function updateEditorHistoryButtons({ canUndo, canRedo }) {
 
 function setEditorMode(mode) {
     elements.editorWorkspace.dataset.editorMode = mode;
+    localStorage.setItem('editorMode', mode);
     document.querySelectorAll('[data-editor-mode]').forEach(button => {
         const active = button.dataset.editorMode === mode;
         button.classList.toggle('is-active', active);
         button.setAttribute('aria-pressed', String(active));
     });
+    requestAnimationFrame(() => syncEditorScrollFromSource());
 }
 
 function togglePanel(name) {
@@ -1172,6 +1460,7 @@ async function moveNoteToFolder(noteID, folder) {
             method: 'PATCH',
             body: JSON.stringify({ folder })
         });
+        state.graphData = null;
         if (state.view === 'editor' && state.noteID === noteID) {
             state.noteFolder = folder;
             state.savedDraft = getDraft();
@@ -1194,6 +1483,7 @@ async function moveFolderToParent(source, target) {
             method: 'POST',
             body: JSON.stringify({ source, target })
         });
+        state.graphData = null;
         state.folder = rebaseFolderPath(state.folder, source, result.folder);
         if (state.listState) {
             state.listState.folder = rebaseFolderPath(state.listState.folder || '', source, result.folder);
@@ -1229,6 +1519,7 @@ async function refreshFolderTree() {
 
 async function selectFolder(folder) {
     if (state.view === 'editor' && !(await flushSave())) return;
+    if (state.graphVisible) closeGraphView();
     if (state.view === 'editor') {
         history.pushState({ view: 'list', list: { ...captureListState(), folder, offset: 0 } }, '', location.pathname);
         state.view = 'list';
@@ -1239,6 +1530,7 @@ async function selectFolder(folder) {
     }
     state.folder = folder;
     state.offset = 0;
+    if (window.matchMedia('(max-width: 700px)').matches) closePanel();
     loadNotes();
     updateListHistory();
     if (elements.panel.dataset.panel === 'files') renderFolderPanel();
@@ -1265,6 +1557,7 @@ async function requestJSON(url, options = {}) {
     });
     if (!response.ok) {
         const message = (await response.text()).trim();
+        if (response.status === 401) location.replace('/login.html');
         throw new Error(message || `HTTP ${response.status}`);
     }
     if (response.status === 204) return null;

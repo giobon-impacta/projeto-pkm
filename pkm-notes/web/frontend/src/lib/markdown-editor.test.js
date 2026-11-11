@@ -47,6 +47,44 @@ test('continues ordered lists with the next number', () => {
     assert.equal(textarea.value, '1. first\n2. ');
 });
 
+test('inserts a Markdown link with Ctrl+K', () => {
+    const textarea = createTextarea('selected text', 0, 13);
+    const editor = new MarkdownEditor(textarea, () => {});
+    let prevented = false;
+    editor.handleKeydown({
+        ctrlKey: true,
+        metaKey: false,
+        key: 'k',
+        preventDefault() { prevented = true; }
+    });
+    assert.equal(prevented, true);
+    assert.equal(textarea.value, '[selected text](url)');
+});
+
+test('Ctrl+Alt+T inserts a table on its own Markdown lines', () => {
+    const textarea = createTextarea('before after', 7, 7);
+    const editor = new MarkdownEditor(textarea, () => {});
+    let prevented = false;
+    editor.handleKeydown({
+        ctrlKey: true,
+        metaKey: false,
+        altKey: true,
+        key: 't',
+        preventDefault() { prevented = true; }
+    });
+    assert.equal(prevented, true);
+    assert.equal(textarea.value, 'before\n\n| Coluna 1 | Coluna 2 |\n| --- | --- |\n| Célula | Célula |\n\nafter');
+    assert.equal(textarea.value.slice(textarea.selectionStart, textarea.selectionEnd), 'Célula');
+});
+
+test('inserts and selects a Markdown table cell', () => {
+    const textarea = createTextarea('', 0, 0);
+    const editor = new MarkdownEditor(textarea, () => {});
+    editor.insertTable();
+    assert.equal(textarea.value, '| Coluna 1 | Coluna 2 |\n| --- | --- |\n| Célula | Célula |');
+    assert.equal(textarea.value.slice(textarea.selectionStart, textarea.selectionEnd), 'Célula');
+});
+
 test('adds legacy tags to Markdown frontmatter without a separate tags field', () => {
     const markdown = ensureFrontmatterTags('# Note\n\nBody', ['sei-la']);
     assert.equal(markdown, '---\ntags: sei-la\n---\n\n# Note\n\nBody');

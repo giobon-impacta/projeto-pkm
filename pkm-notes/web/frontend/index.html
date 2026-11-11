@@ -14,6 +14,9 @@
         <button class="rail-button is-active" type="button" data-panel="files" aria-label="Abrir pastas" title="Pastas">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h6l2 2h9v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M3.5 8.5v-2a2 2 0 0 1 2-2h3l2 2"/></svg>
         </button>
+        <button class="rail-button" id="graphButton" type="button" aria-label="Abrir grafo de notas" title="Grafo de notas" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="7" r="2.2"/><circle cx="10" cy="18" r="2.2"/><path d="m8 6.3 7.8.4M7.3 8l2 7.8m7.2-6.7-5 7"/></svg>
+        </button>
         <div class="rail-spacer"></div>
         <button class="rail-button" id="themeToggle" type="button" aria-label="Alternar tema" title="Alternar tema">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
@@ -36,6 +39,7 @@
                 <span class="breadcrumb" id="currentFolder">Todas as notas</span>
             </div>
             <div class="topbar-actions">
+                <button class="button button-muted" id="logoutButton" type="button" hidden>Sair</button>
                 <button class="button button-primary" id="newNote" type="button"><span aria-hidden="true">＋</span> Nova nota</button>
             </div>
         </header>
@@ -70,6 +74,29 @@
             </section>
         </div>
 
+        <section id="graphView" class="graph-view" aria-label="Grafo de notas" hidden>
+            <header class="graph-header">
+                <div>
+                    <h2>Grafo de notas</h2>
+                    <p id="graphSummary" aria-live="polite">Carregando relações…</p>
+                </div>
+                <div class="graph-actions">
+                    <label class="sr-only" for="graphSearch">Filtrar notas no grafo</label>
+                    <input id="graphSearch" type="search" placeholder="Filtrar notas..." autocomplete="off">
+                    <button class="button button-muted" id="fitGraph" type="button" title="Ajustar grafo à tela">Ajustar</button>
+                    <button class="button button-muted" id="closeGraph" type="button">Voltar</button>
+                </div>
+            </header>
+            <div class="graph-legend" aria-label="Tipos de relação">
+                <span><i class="graph-legend-line"></i>Link Markdown</span>
+                <span><i class="graph-legend-line is-wikilink"></i>Wikilink</span>
+                <span class="graph-hint">Arraste o fundo para mover, role para zoom e clique em uma nota para abri-la.</span>
+            </div>
+            <div class="graph-stage">
+                <svg id="noteGraph" class="graph-canvas" role="group" aria-label="Relações entre notas"></svg>
+            </div>
+        </section>
+
         <section id="editorView" class="editor-view" aria-label="Editor de nota" hidden>
             <header class="editor-header">
                 <label class="sr-only" for="noteTitle">Título da nota</label>
@@ -79,6 +106,14 @@
                     <button class="icon-button danger-hover" id="deleteCurrentNote" type="button" aria-label="Excluir nota" title="Excluir nota" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg></button>
                 </div>
             </header>
+            <section id="attachmentsPanel" class="attachments-panel" aria-label="Anexos da nota" hidden>
+                <div class="attachments-heading">
+                    <span class="pane-label">Anexos</span>
+                    <button class="text-button" id="addAttachment" type="button">Adicionar arquivo</button>
+                    <input id="attachmentInput" type="file" multiple hidden>
+                </div>
+                <ul id="attachmentList" class="attachment-list"></ul>
+            </section>
             <div class="editor-toolbar">
                 <div class="markdown-tools" role="toolbar" aria-label="Formatação Markdown">
                     <button type="button" data-action="undo" aria-label="Desfazer" title="Desfazer (Ctrl+Z)" disabled>↶</button>
@@ -97,6 +132,7 @@
                     <button type="button" data-format="ordered" aria-label="Lista numerada" title="Lista numerada">1≡</button>
                     <button type="button" data-format="task" aria-label="Tarefa" title="Tarefa">☐</button>
                     <button type="button" data-format="codeblock" aria-label="Bloco de código" title="Bloco de código">{ }</button>
+                    <button type="button" data-format="table" aria-label="Tabela" title="Tabela (Ctrl+Alt+T)">▦</button>
                 </div>
                 <div class="editor-toolbar-right">
                     <button class="text-button save-now" id="saveNow" type="button">Salvar agora</button>

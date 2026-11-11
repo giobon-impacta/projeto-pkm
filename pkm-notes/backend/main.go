@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -12,17 +13,20 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 	"unicode"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/text"
 )
 
@@ -66,7 +70,9 @@ type Folder struct {
 }
 
 type App struct {
-	db *sql.DB
+	db             *sql.DB
+	attachmentsDir string
+	auth           *authenticator
 }
 
 type folderBuilder struct {
@@ -85,7 +91,10 @@ func NewApp(dataDir string) (*App, error) {
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	app := &App{db: db}
+	app := &App{
+		db:             db,
+		attachmentsDir: filepath.Join(dataDir, "attachments"),
+	}
 
 	for _, statement := range []string{
 		"PRAGMA busy_timeout = 5000",
@@ -101,6 +110,27 @@ func NewApp(dataDir string) (*App, error) {
 	if err := app.migrate(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate database: %w", err)
+	}
+	if err := os.MkdirAll(app.attachmentsDir, 0700); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create attachment storage: %w", err)
+	}
+	app.auth, err = newAuthenticator(os.Getenv("AUTHENTICATION_PASSWORD"))
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("initialize authentication: %w", err)
+	}
+	if configured := os.Getenv("AUTHENTICATION_COOKIE_SECURE"); configured != "" {
+		app.auth.secure, err = strconv.ParseBool(configured)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("parse AUTHENTICATION_COOKIE_SECURE: %w", err)
+		}
+	}
+	if app.auth.enabled() {
+		log.Printf("Authentication enabled")
+	} else {
+		log.Printf("Authentication disabled; set AUTHENTICATION_PASSWORD to require login")
 	}
 	log.Printf("Database initialized at %s", filepath.Join(dataDir, "notes.db"))
 	return app, nil
@@ -135,6 +165,21 @@ func (a *App) migrate() error {
 		version INTEGER PRIMARY KEY,
 		applied_at TEXT NOT NULL DEFAULT (datetime('now'))
 	)`); err != nil {
+		return err
+	}
+	if _, err := a.db.Exec(`CREATE TABLE IF NOT EXISTS attachments (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		note_id INTEGER NOT NULL REFERENCES notes(rowid) ON DELETE CASCADE,
+		filename TEXT NOT NULL,
+		storage_name TEXT NOT NULL,
+		media_type TEXT NOT NULL,
+		size INTEGER NOT NULL,
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		UNIQUE(note_id, storage_name)
+	)`); err != nil {
+		return err
+	}
+	if _, err := a.db.Exec("CREATE INDEX IF NOT EXISTS idx_attachments_note ON attachments(note_id, id)"); err != nil {
 		return err
 	}
 
@@ -437,6 +482,10 @@ func (a *App) DeleteNote(id int64) error {
 	if count == 0 {
 		return sql.ErrNoRows
 	}
+	noteDir := filepath.Join(a.attachmentsDir, strconv.FormatInt(id, 10))
+	if err := os.RemoveAll(noteDir); err != nil {
+		log.Printf("remove attachments for deleted note %d: %v", id, err)
+	}
 	return nil
 }
 
@@ -596,15 +645,32 @@ func folderValues(parent *folderBuilder) []Folder {
 func (a *App) Handler(frontendDir string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", a.handleHealth)
+	mux.HandleFunc("/api/auth/status", a.auth.status)
+	mux.HandleFunc("/api/auth/login", a.auth.login)
+	mux.HandleFunc("/api/auth/logout", a.auth.logout)
 	mux.HandleFunc("/api/notes", a.handleNotes)
 	mux.HandleFunc("/api/notes/", a.handleNote)
 	mux.HandleFunc("/api/search", a.handleSearch)
 	mux.HandleFunc("/api/folders", a.handleFolders)
 	mux.HandleFunc("/api/folders/move", a.handleFolderMove)
 	mux.HandleFunc("/api/folder-notes", a.handleFolderNotes)
+	mux.HandleFunc("/api/graph", a.handleGraph)
 	mux.HandleFunc("/api/preview", handlePreview)
-	mux.Handle("/", http.FileServer(http.Dir(frontendDir)))
-	return mux
+	mux.Handle("/", revalidateStaticFiles(http.FileServer(http.Dir(frontendDir))))
+	return a.auth.middleware(mux)
+}
+
+// revalidateStaticFiles prevents the browser from reusing a cached frontend
+// bundle after the server is rebuilt. http.FileServer only sends Last-Modified,
+// so browsers may serve script and stylesheet files heuristically for hours;
+// refreshing the page would then keep an old main.js while loading the newer
+// index.html. The no-cache directive still allows 304 responses for unchanged
+// files, so revalidation stays cheap.
+func revalidateStaticFiles(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -662,12 +728,35 @@ func (a *App) handleNote(w http.ResponseWriter, r *http.Request) {
 	rawID := strings.TrimPrefix(r.URL.Path, "/api/notes/")
 	parts := strings.Split(rawID, "/")
 	id, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil || id < 1 || len(parts) > 2 || (len(parts) == 2 && parts[1] != "folder") {
+	if err != nil || id < 1 || len(parts) > 3 {
 		http.Error(w, "invalid note ID", http.StatusBadRequest)
 		return
 	}
-	if len(parts) == 2 {
+	if len(parts) == 2 && parts[1] == "folder" {
 		a.handleNoteFolderMove(w, r, id)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "backlinks" {
+		a.handleBacklinks(w, r, id)
+		return
+	}
+	if len(parts) >= 2 && parts[1] == "attachments" {
+		if len(parts) == 2 {
+			a.handleAttachments(w, r, id)
+			return
+		}
+		if len(parts) == 3 {
+			attachmentID, parseErr := strconv.ParseInt(parts[2], 10, 64)
+			if parseErr != nil || attachmentID < 1 {
+				http.Error(w, "invalid attachment ID", http.StatusBadRequest)
+				return
+			}
+			a.handleAttachment(w, r, id, attachmentID)
+			return
+		}
+	}
+	if len(parts) != 1 {
+		http.Error(w, "invalid note endpoint", http.StatusBadRequest)
 		return
 	}
 	switch r.Method {
@@ -841,7 +930,7 @@ func handlePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	md := goldmark.New()
+	md := goldmark.New(goldmark.WithExtensions(extension.GFM))
 	document := md.Parser().Parse(text.NewReader(source))
 	if err := ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
@@ -966,9 +1055,24 @@ func main() {
 		Addr:              fmt.Sprintf(":%d", portNumber),
 		Handler:           app.Handler("./web/frontend"),
 		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
+	signals, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	shutdownDone := make(chan struct{})
+	go func() {
+		defer close(shutdownDone)
+		<-signals.Done()
+		log.Printf("Shutting down; closing database cleanly")
+		shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownContext); err != nil {
+			log.Printf("HTTP shutdown: %v", err)
+		}
+	}()
 	log.Printf("PKM Notes listening on http://localhost:%d", portNumber)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("serve application: %v", err)
 	}
+	<-shutdownDone
 }

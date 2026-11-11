@@ -132,6 +132,19 @@ func TestNotesAPIAndPagination(t *testing.T) {
 	if rootResponse.Code != http.StatusOK || !strings.Contains(rootResponse.Body.String(), "<title>PKM Notes</title>") {
 		t.Fatalf("homepage response = %d, body = %s", rootResponse.Code, rootResponse.Body.String())
 	}
+	if cacheControl := rootResponse.Header().Get("Cache-Control"); cacheControl != "no-cache" {
+		t.Fatalf("homepage Cache-Control = %q, want no-cache", cacheControl)
+	}
+
+	scriptRequest := httptest.NewRequest(http.MethodGet, "/src/main.js", nil)
+	scriptResponse := httptest.NewRecorder()
+	handler.ServeHTTP(scriptResponse, scriptRequest)
+	if scriptResponse.Code != http.StatusOK {
+		t.Fatalf("script response = %d, body = %s", scriptResponse.Code, scriptResponse.Body.String())
+	}
+	if cacheControl := scriptResponse.Header().Get("Cache-Control"); cacheControl != "no-cache" {
+		t.Fatalf("script Cache-Control = %q, want no-cache", cacheControl)
+	}
 
 	createRequest := httptest.NewRequest(http.MethodPost, "/api/notes", strings.NewReader(
 		`{"title":"API note","content":"body","folder":"Work","tags":["api"]}`,
@@ -454,5 +467,28 @@ func TestMarkdownPreviewRestrictsUnsafeContent(t *testing.T) {
 	}
 	if !strings.Contains(rendered, `href="#"`) {
 		t.Fatalf("unsafe link should be neutralized: %s", rendered)
+	}
+}
+
+func TestMarkdownPreviewRendersGFMExtensions(t *testing.T) {
+	source := "| A | B |\n| --- | --- |\n| 1 | 2 |\n\n" +
+		"~~riscado~~\n\n- [ ] pendente\n- [x] feita\n\nhttps://example.com\n"
+	request := httptest.NewRequest(http.MethodPost, "/api/preview", strings.NewReader(source))
+	response := httptest.NewRecorder()
+	handlePreview(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("preview status = %d, body = %s", response.Code, response.Body.String())
+	}
+	rendered := response.Body.String()
+	for _, expected := range []string{
+		"<table>",
+		"<del>riscado</del>",
+		`type="checkbox"`,
+		`href="https://example.com"`,
+	} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("GFM output is missing %q: %s", expected, rendered)
+		}
 	}
 }

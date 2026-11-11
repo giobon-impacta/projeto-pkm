@@ -105,6 +105,10 @@ export class MarkdownEditor {
     }
 
     format(format) {
+        if (format === 'table') {
+            this.insertTable();
+            return;
+        }
         const value = this.textarea.value;
         const { selectionStart: start, selectionEnd: end } = this.textarea;
         let result;
@@ -155,6 +159,16 @@ export class MarkdownEditor {
             this.format(event.key.toLowerCase() === 'b' ? 'bold' : 'italic');
             return;
         }
+        if (mod && event.key.toLowerCase() === 'k') {
+            event.preventDefault();
+            this.format('link');
+            return;
+        }
+        if (mod && event.altKey && event.key.toLowerCase() === 't') {
+            event.preventDefault();
+            this.insertTable();
+            return;
+        }
         if (event.key === 'Tab') {
             event.preventDefault();
             const { selectionStart, selectionEnd } = this.textarea;
@@ -182,6 +196,28 @@ export class MarkdownEditor {
             event.preventDefault();
             this.textarea.setSelectionRange(selectionStart + 1, selectionStart + 1);
         }
+    }
+
+    insertTable() {
+        const value = this.textarea.value;
+        const { selectionStart: start, selectionEnd: end } = this.textarea;
+        let insertionStart = start;
+        let insertionEnd = end;
+        while (insertionStart > 0 && /[ \t]/.test(value[insertionStart - 1])) insertionStart--;
+        while (insertionEnd < value.length && /[ \t]/.test(value[insertionEnd])) insertionEnd++;
+        const table = '| Coluna 1 | Coluna 2 |\n| --- | --- |\n| Célula | Célula |';
+        const before = insertionStart > 0 && value[insertionStart - 1] !== '\n'
+            ? '\n\n'
+            : insertionStart > 1 && value[insertionStart - 1] === '\n' && value[insertionStart - 2] !== '\n' ? '\n' : '';
+        const after = insertionEnd < value.length && value[insertionEnd] !== '\n'
+            ? '\n\n'
+            : insertionEnd < value.length - 1 && value[insertionEnd] === '\n' && value[insertionEnd + 1] !== '\n' ? '\n' : '';
+        const cellStart = table.indexOf('Célula');
+        this.apply({
+            value: `${value.slice(0, insertionStart)}${before}${table}${after}${value.slice(insertionEnd)}`,
+            start: insertionStart + before.length + cellStart,
+            end: insertionStart + before.length + cellStart + 'Célula'.length
+        });
     }
 
     continueMarkdownList() {
