@@ -1,6 +1,12 @@
-import { ensureFrontmatterTags, extractMarkdownOutline, frontmatterLineOffset, highlightCode, highlightMarkdown, MarkdownEditor, parseFrontmatter, stripFrontmatter } from './lib/markdown-editor.js';
+import { requestJSON } from './lib/api-client.js';
+import { ensureFrontmatterTags, extractMarkdownOutline, frontmatterLineOffset, highlightMarkdown, MarkdownEditor, parseFrontmatter } from './lib/markdown-editor.js';
 import { GraphView } from './lib/graph-view.js';
-import { getScrollSpacerHeight, mapEditorToPreview, mapPreviewToEditor } from './lib/scroll-sync.js';
+import { highlightCode } from './lib/syntax-highlight.js';
+
+import { init as editorInit } from './lib/editor.js';
+import { init as searchInit } from './lib/search.js';
+import { init as navigationInit } from './lib/navigation.js';
+import { init as attachmentsInit } from './lib/attachments.js';
 
 const pageSize = 30;
 const treePageSize = 100;
@@ -182,7 +188,12 @@ function updateSplitRatio() {
 }
 
 async function initialize() {
-    setupEventListeners();
+    // Initialize modules
+    editorInit(elements, state);
+    searchInit();
+    navigationInit();
+    attachmentsInit();
+
     try {
         const response = await fetch('/api/auth/status');
         if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
@@ -2695,34 +2706,6 @@ function toggleTheme() {
     const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
     document.documentElement.dataset.theme = next;
     localStorage.setItem('theme', next);
-}
-
-async function requestJSON(url, options = {}) {
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-            ...options.headers
-        }
-    });
-    if (!response.ok) {
-        const text = (await response.text()).trim();
-        let body = null;
-        if (text) {
-            try {
-                body = JSON.parse(text);
-            } catch (error) {
-                body = null;
-            }
-        }
-        if (response.status === 401) location.replace('/login.html');
-        const error = new Error(body?.error || text || `HTTP ${response.status}`);
-        error.status = response.status;
-        error.body = body;
-        throw error;
-    }
-    if (response.status === 204) return null;
-    return response.json();
 }
 
 function showMessage(message, kind = '') {

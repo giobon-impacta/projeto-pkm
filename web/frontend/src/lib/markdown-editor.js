@@ -1,3 +1,5 @@
+import { highlightCode } from './syntax-highlight.js';
+
 function replaceSelection(value, start, end, before, after = before, placeholder = '') {
     const selected = value.slice(start, end) || placeholder;
     const next = `${value.slice(0, start)}${before}${selected}${after}${value.slice(end)}`;
@@ -301,69 +303,6 @@ export class MarkdownEditor {
 
 function escapeHTML(source) {
     return source.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-}
-
-const codeLanguageAliases = {
-    javascript: ['js', 'javascript', 'jsx', 'ts', 'tsx', 'typescript'],
-    python: ['py', 'python'],
-    go: ['go', 'golang'],
-    json: ['json'],
-    shell: ['sh', 'bash', 'shell', 'zsh'],
-    css: ['css'],
-    html: ['html', 'xml', 'svg']
-};
-const codeKeywords = {
-    javascript: /\b(?:async|await|break|case|catch|class|const|continue|debugger|default|delete|do|else|export|extends|false|finally|for|from|function|if|import|in|instanceof|let|new|null|of|return|static|super|switch|this|throw|true|try|typeof|undefined|var|void|while|yield|interface|implements|type|enum|public|private|readonly)\b/g,
-    python: /\b(?:and|as|assert|async|await|break|class|continue|def|del|elif|else|except|False|finally|for|from|global|if|import|in|is|lambda|None|nonlocal|not|or|pass|raise|return|True|try|while|with|yield|self)\b/g,
-    go: /\b(?:break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var|true|false|nil|string|int|bool|error)\b/g,
-    json: /\b(?:true|false|null)\b/g,
-    shell: /\b(?:case|do|done|elif|else|esac|fi|for|function|if|in|select|then|time|until|while)\b/g,
-    css: /\b(?:important|inherit|initial|unset|auto|none|block|flex|grid|absolute|relative|fixed)\b/g,
-    html: null
-};
-
-export function highlightCode(source, language = '') {
-    const normalizedLanguage = Object.entries(codeLanguageAliases)
-        .find(([, aliases]) => aliases.includes(language.toLowerCase()))?.[0];
-    if (!normalizedLanguage) return escapeHTML(source);
-    if (normalizedLanguage === 'html') {
-        return escapeHTML(source).replace(/(&lt;\/?)([a-z][\w:-]*)([\s\S]*?&gt;)/gi, (_, opening, tag, tail) => {
-            const attributes = tail
-                .replace(/(\s)([\w:-]+)(=)/g, '$1<span class="syntax-function">$2</span>$3')
-                .replace(/("(?:[^"]*)"|'(?:[^']*)')/g, '<span class="syntax-string">$1</span>');
-            return `${opening}<span class="syntax-keyword">${tag}</span>${attributes}`;
-        });
-    }
-
-    const keywords = codeKeywords[normalizedLanguage];
-    const hashComments = ['python', 'shell'].includes(normalizedLanguage) ? '|#[^\\n]*' : '';
-    const tokenPattern = new RegExp([
-        '/\\*[\\s\\S]*?\\*/',
-        `//[^\\n]*${hashComments}`,
-        '"(?:\\\\.|[^"\\\\])*"',
-        "'(?:\\\\.|[^'\\\\])*'",
-        '\\x60(?:\\\\.|[^\\x60\\\\])*\\x60',
-        '\\b\\d+(?:\\.\\d+)?\\b',
-        '[A-Za-z_$][\\w$]*'
-    ].join('|'), 'g');
-    let result = '';
-    let previousEnd = 0;
-    for (const match of source.matchAll(tokenPattern)) {
-        const [token] = match;
-        const start = match.index;
-        result += escapeHTML(source.slice(previousEnd, start));
-        let tokenClass = '';
-        if (/^(?:\/\*|\/\/|#)/.test(token)) tokenClass = 'syntax-comment';
-        else if (/^(?:"|'|`)/.test(token)) tokenClass = 'syntax-string';
-        else if (/^\d/.test(token)) tokenClass = 'syntax-number';
-        else if (keywords && new RegExp(keywords.source, keywords.flags).test(token)) tokenClass = 'syntax-keyword';
-        else if (/\($/.test(source.slice(start + token.length, start + token.length + 1))) tokenClass = 'syntax-function';
-        result += tokenClass
-            ? `<span class="${tokenClass}">${escapeHTML(token)}</span>`
-            : escapeHTML(token);
-        previousEnd = start + token.length;
-    }
-    return result + escapeHTML(source.slice(previousEnd));
 }
 
 function highlightMarkdownLine(source) {

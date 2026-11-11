@@ -454,11 +454,13 @@ body.is-resizing-editor { cursor: col-resize; user-select: none; }
 .md-strong { color: #f0c674; font-weight: 700; }
 .md-emphasis { color: #d7a6e8; font-style: italic; }
 .md-link, .md-wikilink { color: var(--accent); }
-.syntax-keyword { color: #c792ea; }
-.syntax-string { color: #a7d7a1; }
-.syntax-comment { color: var(--faint); font-style: italic; }
-.syntax-number { color: #f0c674; }
-.syntax-function { color: #82aaff; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal { color: #c792ea; }
+.hljs-string, .hljs-attr, .hljs-attribute { color: #a7d7a1; }
+.hljs-comment, .hljs-quote { color: var(--faint); font-style: italic; }
+.hljs-number, .hljs-literal { color: #f0c674; }
+.hljs-title, .hljs-title.function_, .hljs-built_in { color: #82aaff; }
+.hljs-type, .hljs-name, .hljs-tag { color: #e7a86f; }
+.hljs-variable, .hljs-params, .hljs-meta { color: #d7a6e8; }
 .wikilink-autocomplete { position: fixed; z-index: 40; width: min(360px, calc(100vw - 16px)); max-height: 248px; overflow: auto; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); box-shadow: 0 8px 24px #0006; }
 .wikilink-option { display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 6px 8px; border: 0; border-radius: 4px; color: var(--text); background: transparent; text-align: left; cursor: pointer; }
 .wikilink-option:hover, .wikilink-option.is-active { background: var(--surface-hover); }

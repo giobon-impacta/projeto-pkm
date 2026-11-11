@@ -1389,6 +1389,10 @@ func main() {
 	if defaultDataDir == "" {
 		defaultDataDir = "./data"
 	}
+	// Normalize to absolute path if relative (for consistency with run.sh)
+	if !filepath.IsAbs(defaultDataDir) {
+		defaultDataDir = filepath.Clean(filepath.Join("./", defaultDataDir))
+	}
 	defaultPort := os.Getenv("PORT")
 	if defaultPort == "" {
 		defaultPort = "8000"

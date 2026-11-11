@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -145,6 +146,17 @@ func TestNotesAPIAndPagination(t *testing.T) {
 	if cacheControl := scriptResponse.Header().Get("Cache-Control"); cacheControl != "no-cache" {
 		t.Fatalf("script Cache-Control = %q, want no-cache", cacheControl)
 	}
+	for _, staticPath := range []string{
+		"/src/lib/api-client.js",
+		"/src/lib/syntax-highlight.js",
+		"/vendor/highlight.js/highlight.min.js",
+	} {
+		staticResponse := httptest.NewRecorder()
+		handler.ServeHTTP(staticResponse, httptest.NewRequest(http.MethodGet, staticPath, nil))
+		if staticResponse.Code != http.StatusOK {
+			t.Errorf("static asset %s response = %d", staticPath, staticResponse.Code)
+		}
+	}
 
 	createRequest := httptest.NewRequest(http.MethodPost, "/api/notes", strings.NewReader(
 		`{"title":"API note","content":"body","folder":"Work","tags":["api"]}`,
@@ -227,6 +239,75 @@ func TestNotesAPIAndPagination(t *testing.T) {
 	handler.ServeHTTP(invalidResponse, invalidSearch)
 	if invalidResponse.Code != http.StatusBadRequest {
 		t.Fatalf("search without mode status = %d", invalidResponse.Code)
+	}
+}
+
+func TestNotesWorkflowThroughHTTPAPI(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	handler := app.Handler(filepath.Join("..", "web", "frontend"))
+	send := func(method, path, body string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(method, path, strings.NewReader(body))
+		if body != "" {
+			request.Header.Set("Content-Type", "application/json")
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		return response
+	}
+
+	createdResponse := send(http.MethodPost, "/api/notes",
+		`{"title":"Workflow draft","content":"first version","folder":"Projects"}`)
+	if createdResponse.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, body = %s", createdResponse.Code, createdResponse.Body.String())
+	}
+	var note Note
+	if err := json.Unmarshal(createdResponse.Body.Bytes(), &note); err != nil {
+		t.Fatal(err)
+	}
+	notePath := "/api/notes/" + strconv.FormatInt(note.ID, 10)
+
+	updateResponse := send(http.MethodPut, notePath,
+		`{"title":"Workflow draft","content":"searchable second version","folder":"Projects","version":1}`)
+	if updateResponse.Code != http.StatusOK {
+		t.Fatalf("update status = %d, body = %s", updateResponse.Code, updateResponse.Body.String())
+	}
+	if response := send(http.MethodGet, "/api/search?q=searchable&mode=content", ""); response.Code != http.StatusOK ||
+		!strings.Contains(response.Body.String(), "Workflow draft") {
+		t.Fatalf("updated note was not searchable: status=%d body=%s", response.Code, response.Body.String())
+	}
+	historyResponse := send(http.MethodGet, notePath+"/versions", "")
+	if historyResponse.Code != http.StatusOK || !strings.Contains(historyResponse.Body.String(), "first version") {
+		t.Fatalf("note history response = %d, body = %s", historyResponse.Code, historyResponse.Body.String())
+	}
+
+	backupResponse := send(http.MethodGet, "/api/backup", "")
+	if backupResponse.Code != http.StatusOK {
+		t.Fatalf("backup export status = %d, body = %s", backupResponse.Code, backupResponse.Body.String())
+	}
+	if response := send(http.MethodPost, "/api/notes",
+		`{"title":"Temporary note","content":"will be replaced"}`); response.Code != http.StatusCreated {
+		t.Fatalf("temporary note create status = %d, body = %s", response.Code, response.Body.String())
+	}
+	restoreRequest := httptest.NewRequest(http.MethodPost, "/api/backup", bytes.NewReader(backupResponse.Body.Bytes()))
+	restoreResponse := httptest.NewRecorder()
+	handler.ServeHTTP(restoreResponse, restoreRequest)
+	if restoreResponse.Code != http.StatusOK {
+		t.Fatalf("backup restore status = %d, body = %s", restoreResponse.Code, restoreResponse.Body.String())
+	}
+	var counts map[string]int
+	if err := json.Unmarshal(restoreResponse.Body.Bytes(), &counts); err != nil {
+		t.Fatal(err)
+	}
+	if counts["notes"] != 1 {
+		t.Fatalf("restore counts = %#v", counts)
+	}
+	restoredResponse := send(http.MethodGet, notePath, "")
+	if restoredResponse.Code != http.StatusOK || !strings.Contains(restoredResponse.Body.String(), "searchable second version") {
+		t.Fatalf("restored note = %d, body = %s", restoredResponse.Code, restoredResponse.Body.String())
 	}
 }
 

@@ -3,13 +3,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
-DATA_DIR="$SCRIPT_DIR/data"
+DATA_DIR="${NOTES_DIR:-$SCRIPT_DIR/data}"
 PORT="${PORT:-8000}"
 
 usage() {
     cat <<'EOF'
 Usage: ./run.sh [--data-dir PATH] [--port PORT]
-  --data-dir  Directory for SQLite notes (default: ./data)
+  --data-dir  Directory for SQLite notes (default: NOTES_DIR or ./data)
   --port      HTTP port (default: 8000, or PORT environment variable)
   Set AUTHENTICATION_PASSWORD to require login. Behind a TLS proxy, also set
   AUTHENTICATION_COOKIE_SECURE=true.
