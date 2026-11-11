@@ -28,7 +28,14 @@ const state = {
     navigationID: 0,
     searchTimer: null,
     saveTimer: null,
-    savePromise: null
+    savePromise: null,
+    wikilinkRequestID: 0,
+    wikilinkTimer: null,
+    wikilinkAutocomplete: {
+        open: false,
+        items: [],
+        activeIndex: 0
+    }
 };
 let editorSplitPercent = 50;
 
@@ -51,6 +58,7 @@ const elements = {
     noteContent: document.querySelector('#noteContent'),
     sourceHighlight: document.querySelector('#sourceHighlight'),
     markdownPreview: document.querySelector('#markdownPreview'),
+    wikilinkAutocomplete: document.querySelector('#wikilinkAutocomplete'),
     editorWorkspace: document.querySelector('.editor-workspace'),
     saveStatus: document.querySelector('#saveStatus'),
     appMessage: document.querySelector('#appMessage'),
@@ -231,13 +239,53 @@ function setupEventListeners() {
     elements.panelContent.addEventListener('dragleave', handleSidebarDragLeave);
     elements.panelContent.addEventListener('drop', event => void handleSidebarDrop(event));
     elements.notesList.addEventListener('click', handleNoteListClick);
-    elements.noteContent.addEventListener('input', () => markdownEditor.handleInput());
-    elements.noteContent.addEventListener('keydown', event => markdownEditor.handleKeydown(event));
-    elements.noteContent.addEventListener('scroll', () => handleEditorScroll(elements.noteContent));
+    elements.noteContent.addEventListener('input', () => {
+        markdownEditor.handleInput();
+        scheduleWikilinkSuggestions();
+    });
+    elements.noteContent.addEventListener('keydown', event => {
+        if (!handleWikilinkKeydown(event)) markdownEditor.handleKeydown(event);
+    });
+    elements.noteContent.addEventListener('keyup', event => {
+        if (!['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'].includes(event.key)) {
+            scheduleWikilinkSuggestions();
+        }
+    });
+    elements.noteContent.addEventListener('click', scheduleWikilinkSuggestions);
+    elements.noteContent.addEventListener('blur', () => {
+        window.setTimeout(closeWikilinkAutocomplete, 100);
+    });
+    elements.wikilinkAutocomplete.addEventListener('mousedown', event => event.preventDefault());
+    elements.wikilinkAutocomplete.addEventListener('click', event => {
+        const option = event.target.closest('[data-wikilink-index]');
+        if (!option) return;
+        const item = state.wikilinkAutocomplete.items[Number(option.dataset.wikilinkIndex)];
+        if (item) acceptWikilinkSuggestion(item);
+    });
+    elements.wikilinkAutocomplete.addEventListener('mouseover', event => {
+        const option = event.target.closest('[data-wikilink-index]');
+        if (!option) return;
+        state.wikilinkAutocomplete.activeIndex = Number(option.dataset.wikilinkIndex);
+        updateWikilinkActiveOption();
+    });
+    elements.markdownPreview.addEventListener('click', event => {
+        const link = event.target.closest('a[href]');
+        if (!link) return;
+        const params = new URLSearchParams(link.getAttribute('href').replace(/^\?/, ''));
+        const noteID = params.get('note');
+        if (!/^\d+$/.test(noteID || '')) return;
+        event.preventDefault();
+        void openNote(Number(noteID));
+    });
+    elements.noteContent.addEventListener('scroll', () => {
+        handleEditorScroll(elements.noteContent);
+        if (state.wikilinkAutocomplete.open) renderWikilinkAutocomplete();
+    });
     elements.markdownPreview.addEventListener('scroll', () => handleEditorScroll(elements.markdownPreview));
     window.addEventListener('resize', () => {
         editorLinePositionCache = null;
         syncEditorScrollFromSource();
+        if (state.wikilinkAutocomplete.open) renderWikilinkAutocomplete();
     });
     elements.noteTitle.addEventListener('input', scheduleSave);
     const splitter = document.querySelector('.editor-splitter');
@@ -562,6 +610,194 @@ function handleNoteListClick(event) {
     else if (action.dataset.action === 'delete') void deleteNote(id);
 }
 
+function scheduleWikilinkSuggestions() {
+    const token = markdownEditor.getWikilinkToken();
+    if (state.view !== 'editor' || !token) {
+        closeWikilinkAutocomplete();
+        return;
+    }
+    window.clearTimeout(state.wikilinkTimer);
+    state.wikilinkAutocomplete.open = false;
+    elements.wikilinkAutocomplete.hidden = true;
+    elements.noteContent.setAttribute('aria-expanded', 'false');
+    elements.noteContent.removeAttribute('aria-activedescendant');
+    const requestID = ++state.wikilinkRequestID;
+    state.wikilinkTimer = window.setTimeout(async () => {
+        try {
+            const query = token.query.trim();
+            const params = new URLSearchParams({ limit: '100', offset: '0' });
+            let url = `/api/notes?${params}`;
+            if (query) {
+                params.set('q', query);
+                params.set('mode', 'title');
+                url = `/api/search?${params}`;
+            }
+            const page = await requestJSON(url);
+            const currentToken = markdownEditor.getWikilinkToken();
+            if (requestID !== state.wikilinkRequestID || !currentToken ||
+                currentToken.query !== token.query || currentToken.tokenStart !== token.tokenStart) return;
+
+            const counts = new Map();
+            for (const note of page.items) {
+                const key = note.title.trim().toLocaleLowerCase();
+                counts.set(key, (counts.get(key) || 0) + 1);
+            }
+            const normalizedQuery = query.toLocaleLowerCase();
+            state.wikilinkAutocomplete.items = page.items
+                .map(note => ({
+                    label: note.title,
+                    secondary: note.folder,
+                    insert: counts.get(note.title.trim().toLocaleLowerCase()) > 1 && note.folder
+                        ? `${note.folder}/${note.title}`
+                        : note.title,
+                    prefix: note.title.toLocaleLowerCase().startsWith(normalizedQuery),
+                    updated: note.updated_at || ''
+                }))
+                .sort((a, b) => Number(b.prefix) - Number(a.prefix) ||
+                    b.updated.localeCompare(a.updated) || a.label.localeCompare(b.label))
+                .slice(0, 8);
+            state.wikilinkAutocomplete.activeIndex = 0;
+            state.wikilinkAutocomplete.open = state.wikilinkAutocomplete.items.length > 0;
+            renderWikilinkAutocomplete();
+        } catch (error) {
+            if (requestID === state.wikilinkRequestID) {
+                closeWikilinkAutocomplete();
+                showMessage(`Não foi possível buscar notas para o link: ${error.message}`, 'error');
+            }
+        }
+    }, 100);
+}
+
+function renderWikilinkAutocomplete() {
+    const popup = elements.wikilinkAutocomplete;
+    popup.replaceChildren();
+    state.wikilinkAutocomplete.items.forEach((item, index) => {
+        const option = document.createElement('button');
+        option.type = 'button';
+        option.className = 'wikilink-option';
+        option.dataset.wikilinkIndex = String(index);
+        option.id = `wikilink-option-${index}`;
+        option.setAttribute('role', 'option');
+        option.setAttribute('aria-selected', String(index === state.wikilinkAutocomplete.activeIndex));
+        if (index === state.wikilinkAutocomplete.activeIndex) option.classList.add('is-active');
+        const label = document.createElement('span');
+        label.className = 'wikilink-option-label';
+        label.textContent = item.label;
+        option.append(label);
+        if (item.secondary) {
+            const folder = document.createElement('span');
+            folder.className = 'wikilink-option-folder';
+            folder.textContent = item.secondary;
+            option.append(folder);
+        }
+        popup.append(option);
+    });
+    popup.hidden = !state.wikilinkAutocomplete.open;
+    elements.noteContent.setAttribute('aria-expanded', String(state.wikilinkAutocomplete.open));
+    if (state.wikilinkAutocomplete.open) {
+        elements.noteContent.setAttribute(
+            'aria-activedescendant',
+            `wikilink-option-${state.wikilinkAutocomplete.activeIndex}`
+        );
+        const position = getTextareaCaretPosition(elements.noteContent, elements.noteContent.selectionStart);
+        const bounds = popup.getBoundingClientRect();
+        const left = Math.min(position.left, window.innerWidth - bounds.width - 8);
+        const top = position.top + bounds.height > window.innerHeight
+            ? Math.max(8, position.top - position.height - bounds.height)
+            : position.top;
+        popup.style.left = `${Math.max(8, left)}px`;
+        popup.style.top = `${Math.max(8, top)}px`;
+    } else {
+        elements.noteContent.removeAttribute('aria-activedescendant');
+    }
+}
+
+function getTextareaCaretPosition(textarea, caret) {
+    const computed = window.getComputedStyle(textarea);
+    const mirror = document.createElement('div');
+    const style = mirror.style;
+    for (const property of [
+        'boxSizing', 'width', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth',
+        'borderLeftWidth', 'borderStyle', 'paddingTop', 'paddingRight', 'paddingBottom',
+        'paddingLeft', 'fontStyle', 'fontVariant', 'fontWeight', 'fontStretch', 'fontSize',
+        'fontFamily', 'textAlign', 'textTransform', 'textIndent', 'letterSpacing',
+        'wordSpacing', 'lineHeight', 'tabSize'
+    ]) style[property] = computed[property];
+    style.position = 'absolute';
+    style.visibility = 'hidden';
+    style.whiteSpace = 'pre-wrap';
+    style.wordWrap = 'break-word';
+    style.overflowWrap = 'break-word';
+    style.height = 'auto';
+    style.left = '-100000px';
+    style.top = '0';
+    mirror.textContent = textarea.value.slice(0, caret);
+    const marker = document.createElement('span');
+    marker.textContent = textarea.value.slice(caret) || '.';
+    mirror.append(marker);
+    document.body.append(mirror);
+    const lineHeight = parseFloat(computed.lineHeight) || parseFloat(computed.fontSize) * 1.2;
+    const top = marker.offsetTop + (parseFloat(computed.borderTopWidth) || 0);
+    const left = marker.offsetLeft + (parseFloat(computed.borderLeftWidth) || 0);
+    mirror.remove();
+    const bounds = textarea.getBoundingClientRect();
+    return {
+        top: bounds.top + top - textarea.scrollTop + lineHeight,
+        left: bounds.left + left - textarea.scrollLeft,
+        height: lineHeight
+    };
+}
+
+function handleWikilinkKeydown(event) {
+    if (!state.wikilinkAutocomplete.open) return false;
+    const { items, activeIndex } = state.wikilinkAutocomplete;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        state.wikilinkAutocomplete.activeIndex =
+            (activeIndex + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        renderWikilinkAutocomplete();
+        return true;
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (items[activeIndex]) acceptWikilinkSuggestion(items[activeIndex]);
+        return true;
+    }
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeWikilinkAutocomplete();
+        return true;
+    }
+    if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) closeWikilinkAutocomplete();
+    return false;
+}
+
+function acceptWikilinkSuggestion(item) {
+    closeWikilinkAutocomplete();
+    markdownEditor.acceptWikilink(item.insert);
+}
+
+function updateWikilinkActiveOption() {
+    for (const [index, option] of [...elements.wikilinkAutocomplete.children].entries()) {
+        const active = index === state.wikilinkAutocomplete.activeIndex;
+        option.classList.toggle('is-active', active);
+        option.setAttribute('aria-selected', String(active));
+    }
+}
+
+function closeWikilinkAutocomplete() {
+    window.clearTimeout(state.wikilinkTimer);
+    state.wikilinkRequestID++;
+    state.wikilinkAutocomplete.open = false;
+    state.wikilinkAutocomplete.items = [];
+    elements.wikilinkAutocomplete.hidden = true;
+    elements.noteContent.setAttribute('aria-expanded', 'false');
+    elements.noteContent.removeAttribute('aria-activedescendant');
+}
+
 async function openNewNote() {
     if (state.view === 'editor' && !(await flushSave())) return;
     if (state.view === 'list') state.listState = captureListState();
@@ -590,6 +826,7 @@ async function openNote(id, { push = true } = {}) {
 
 function showEditor(note) {
     window.clearTimeout(state.saveTimer);
+    closeWikilinkAutocomplete();
     if (window.matchMedia('(max-width: 700px)').matches) closePanel();
     state.view = 'editor';
     state.noteID = note?.id ?? null;
@@ -667,6 +904,7 @@ async function persistDraft() {
             state.graphData = null;
             if (id === null) {
                 state.noteID = saved.id;
+                updatePreview();
                 elements.deleteCurrentNote.hidden = false;
                 document.querySelector('#attachmentsPanel').hidden = false;
                 void loadAttachments(saved.id);
@@ -976,7 +1214,10 @@ function updatePreview() {
         try {
             const response = await fetch('/api/preview', {
                 method: 'POST',
-                headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+                headers: {
+                    'Content-Type': 'text/plain; charset=utf-8',
+                    ...(state.noteID === null ? {} : { 'X-Note-ID': String(state.noteID) })
+                },
                 body: markdown
             });
             if (response.status === 401) {

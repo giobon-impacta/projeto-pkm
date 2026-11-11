@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ensureFrontmatterTags, indentSelection, MarkdownEditor, stripFrontmatter } from './markdown-editor.js';
+import { ensureFrontmatterTags, highlightMarkdown, indentSelection, MarkdownEditor, stripFrontmatter } from './markdown-editor.js';
 
 function createTextarea(value, start = 0, end = start) {
     return {
@@ -61,6 +61,32 @@ test('inserts a Markdown link with Ctrl+K', () => {
     assert.equal(textarea.value, '[selected text](url)');
 });
 
+test('detects an unfinished wikilink at the caret', () => {
+    const textarea = createTextarea('before [[Tar', 12);
+    const editor = new MarkdownEditor(textarea, () => {});
+    assert.deepEqual(editor.getWikilinkToken(), { query: 'Tar', tokenStart: 9, caret: 12 });
+    textarea.value = '![[image';
+    textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+    assert.equal(editor.getWikilinkToken(), null);
+});
+
+test('accepts a wikilink suggestion and preserves existing closing brackets', () => {
+    const textarea = createTextarea('[[Tar]] after', 5);
+    const editor = new MarkdownEditor(textarea, () => {});
+    assert.equal(editor.acceptWikilink('Target'), true);
+    assert.equal(textarea.value, '[[Target]] after');
+    assert.equal(textarea.selectionStart, 10);
+    editor.undo();
+    assert.equal(textarea.value, '[[Tar]] after');
+});
+
+test('accepts a wikilink suggestion when closing brackets are not typed yet', () => {
+    const textarea = createTextarea('[[Tar and more', 5);
+    const editor = new MarkdownEditor(textarea, () => {});
+    assert.equal(editor.acceptWikilink('Target'), true);
+    assert.equal(textarea.value, '[[Target]] and more');
+});
+
 test('Ctrl+Alt+T inserts a table on its own Markdown lines', () => {
     const textarea = createTextarea('before after', 7, 7);
     const editor = new MarkdownEditor(textarea, () => {});
@@ -97,4 +123,11 @@ test('preserves existing frontmatter tags', () => {
 
 test('omits metadata frontmatter from the rendered Markdown body', () => {
     assert.equal(stripFrontmatter('---\ntags: pkm\n---\n\n# Note'), '# Note');
+});
+
+test('highlights wikilinks in the Markdown editor', () => {
+    assert.equal(
+        highlightMarkdown('[[Target]] <unsafe>'),
+        '<span class="md-wikilink">[[Target]]</span> &lt;unsafe&gt;'
+    );
 });

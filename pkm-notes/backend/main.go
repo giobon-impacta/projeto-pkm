@@ -655,7 +655,7 @@ func (a *App) Handler(frontendDir string) http.Handler {
 	mux.HandleFunc("/api/folders/move", a.handleFolderMove)
 	mux.HandleFunc("/api/folder-notes", a.handleFolderNotes)
 	mux.HandleFunc("/api/graph", a.handleGraph)
-	mux.HandleFunc("/api/preview", handlePreview)
+	mux.HandleFunc("/api/preview", a.handlePreview)
 	mux.Handle("/", revalidateStaticFiles(http.FileServer(http.Dir(frontendDir))))
 	return a.auth.middleware(mux)
 }
@@ -929,7 +929,55 @@ func handlePreview(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	renderMarkdownPreview(w, source)
+}
 
+func (a *App) handlePreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	source, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxContentSize))
+	if err != nil {
+		var maxBytesError *http.MaxBytesError
+		if errors.As(err, &maxBytesError) {
+			http.Error(w, "markdown content exceeds the 5 MiB limit", http.StatusRequestEntityTooLarge)
+		} else {
+			http.Error(w, "failed to read markdown content", http.StatusBadRequest)
+		}
+		return
+	}
+	if rawID := r.Header.Get("X-Note-ID"); rawID != "" {
+		noteID, err := strconv.ParseInt(rawID, 10, 64)
+		if err != nil || noteID < 1 {
+			http.Error(w, "invalid note ID", http.StatusBadRequest)
+			return
+		}
+		note, err := a.GetNote(noteID)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		if err != nil {
+			log.Printf("load note %d for preview: %v", noteID, err)
+			http.Error(w, "failed to load note for preview", http.StatusInternalServerError)
+			return
+		}
+		notes, err := a.readNotesForLinks()
+		if err != nil {
+			log.Printf("load note index for preview: %v", err)
+			http.Error(w, "failed to load notes for preview", http.StatusInternalServerError)
+			return
+		}
+		byPath, byTitle := makeNoteLinkIndexes(notes)
+		source = []byte(convertWikilinksToMarkdown(string(source),
+			indexedNote{GraphNode: GraphNode{ID: note.ID, Title: note.Title, Folder: note.Folder}},
+			byPath, byTitle))
+	}
+	renderMarkdownPreview(w, source)
+}
+
+func renderMarkdownPreview(w http.ResponseWriter, source []byte) {
 	md := goldmark.New(goldmark.WithExtensions(extension.GFM))
 	document := md.Parser().Parse(text.NewReader(source))
 	if err := ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {

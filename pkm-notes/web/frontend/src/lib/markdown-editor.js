@@ -88,6 +88,30 @@ export class MarkdownEditor {
         this.onChange(value);
     }
 
+    getWikilinkToken() {
+        const { selectionStart, selectionEnd, value } = this.textarea;
+        if (selectionStart !== selectionEnd) return null;
+        const before = value.slice(0, selectionStart);
+        const tokenStart = before.lastIndexOf('[[');
+        if (tokenStart < 0 || (tokenStart > 0 && before[tokenStart - 1] === '!')) return null;
+        const query = before.slice(tokenStart + 2);
+        if (query.length > 100 || /[\[\]\n|]/.test(query)) return null;
+        return { query, tokenStart: tokenStart + 2, caret: selectionStart };
+    }
+
+    acceptWikilink(target) {
+        const token = this.getWikilinkToken();
+        if (!token || !target) return false;
+        const { value } = this.textarea;
+        const after = value.slice(token.caret);
+        const hasClosingBrackets = after.startsWith(']]');
+        const closingBrackets = hasClosingBrackets ? '' : ']]';
+        const next = `${value.slice(0, token.tokenStart)}${target}${closingBrackets}${after}`;
+        const caret = token.tokenStart + target.length + closingBrackets.length + (hasClosingBrackets ? 2 : 0);
+        this.apply({ value: next, start: caret, end: caret });
+        return true;
+    }
+
     apply(result) {
         this.textarea.value = result.value;
         this.textarea.focus();
@@ -281,6 +305,7 @@ export function highlightMarkdown(source) {
         .replace(/^(#{1,6}\s.*)$/gm, '<span class="md-heading">$1</span>')
         .replace(/^(\s*(?:[-+*]|\d+[.)])\s+)/gm, '<span class="md-list">$1</span>')
         .replace(/(```[\s\S]*?```|`[^`\n]+`)/g, '<span class="md-code">$1</span>')
+        .replace(/(!?\[\[[^\]\n]+\]\])/g, '<span class="md-wikilink">$1</span>')
         .replace(/(\*\*[^*\n]+\*\*|__[^_\n]+__)/g, '<span class="md-strong">$1</span>')
         .replace(/(\*[^*\n]+\*|_[^_\n]+_)/g, '<span class="md-emphasis">$1</span>');
 }

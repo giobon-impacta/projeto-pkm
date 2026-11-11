@@ -148,7 +148,7 @@
                     <span class="pane-label">Markdown</span>
                     <div class="source-editor">
                         <pre class="source-highlight" id="sourceHighlight" aria-hidden="true"></pre>
-                        <textarea id="noteContent" name="content" spellcheck="false" aria-label="Conteúdo Markdown" placeholder="# Comece a escrever..."></textarea>
+                        <textarea id="noteContent" name="content" spellcheck="false" aria-label="Conteúdo Markdown" aria-autocomplete="list" aria-controls="wikilinkAutocomplete" aria-expanded="false" placeholder="# Comece a escrever..."></textarea>
                     </div>
                 </section>
                 <div class="editor-splitter" role="separator" aria-label="Redimensionar editor e pré-visualização" aria-orientation="vertical" aria-valuemin="20" aria-valuemax="80" aria-valuenow="50" tabindex="0"></div>
@@ -158,6 +158,7 @@
                 </section>
             </div>
         </section>
+        <div id="wikilinkAutocomplete" class="wikilink-autocomplete" role="listbox" aria-label="Notas para link" hidden></div>
         <div id="appMessage" class="app-message" role="status" aria-live="polite"></div>
     </main>
 </body>

@@ -173,6 +173,35 @@ func TestNoteGraphAndBacklinksResolveMarkdownAndWikilinks(t *testing.T) {
 	}
 }
 
+func TestPreviewWikilinksBecomeNoteLinksOutsideCode(t *testing.T) {
+	source := indexedNote{GraphNode: GraphNode{ID: 1, Title: "Source", Folder: "Projects"}}
+	byPath := map[string]int64{
+		"projects/target": 2,
+		"reference/other": 3,
+	}
+	byTitle := map[string]int64{"target": 2, "other": 3}
+	markdown := "[[Target]] [[Other|Read this]] `[[Target]]`\n\n```md\n[[Target]]\n```\n\n![[Target]] [[Missing]]"
+	rendered := convertWikilinksToMarkdown(markdown, source, byPath, byTitle)
+	for _, expected := range []string{
+		"[Target](?note=2)",
+		"[Read this](?note=3)",
+		"`[[Target]]`",
+		"```md\n[[Target]]\n```",
+		"![[Target]]",
+		"[[Missing]]",
+	} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("preview conversion is missing %q: %s", expected, rendered)
+		}
+	}
+	response := httptest.NewRecorder()
+	renderMarkdownPreview(response, []byte(rendered))
+	if !strings.Contains(response.Body.String(), `<a href="?note=2">Target</a>`) ||
+		!strings.Contains(response.Body.String(), `<a href="?note=3">Read this</a>`) {
+		t.Fatalf("wikilinks did not render as clickable note links: %s", response.Body.String())
+	}
+}
+
 func TestAuthenticationProtectsAPIAndSupportsLoginLogout(t *testing.T) {
 	t.Setenv("AUTHENTICATION_PASSWORD", "test-password")
 	app, err := NewApp(t.TempDir())

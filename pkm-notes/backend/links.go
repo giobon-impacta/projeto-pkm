@@ -9,6 +9,7 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/yuin/goldmark"
@@ -17,6 +18,7 @@ import (
 )
 
 var wikilinkPattern = regexp.MustCompile(`\[\[([^\]|]+)(?:\|[^\]]*)?\]\]`)
+var wikilinkPreviewPattern = regexp.MustCompile(`\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
 var inlineCodePattern = regexp.MustCompile("`+[^`\\n]*`+")
 
 type GraphNode struct {
@@ -43,6 +45,88 @@ type indexedNote struct {
 type linkTarget struct {
 	value string
 	kind  string
+}
+
+func convertWikilinksToMarkdown(content string, source indexedNote, byPath, byTitle map[string]int64) string {
+	lines := strings.Split(content, "\n")
+	var result strings.Builder
+	var fenceChar byte
+	fenceLength := 0
+	for index, line := range lines {
+		if index > 0 {
+			result.WriteByte('\n')
+		}
+		trimmed := strings.TrimSpace(line)
+		if marker := markdownFence(trimmed); marker != "" {
+			if fenceChar == 0 {
+				fenceChar = marker[0]
+				fenceLength = len(marker)
+			} else if marker[0] == fenceChar && len(marker) >= fenceLength {
+				fenceChar = 0
+				fenceLength = 0
+			}
+			result.WriteString(line)
+			continue
+		}
+		if fenceChar != 0 {
+			result.WriteString(line)
+			continue
+		}
+		matches := inlineCodePattern.FindAllStringIndex(line, -1)
+		cursor := 0
+		for _, match := range matches {
+			result.WriteString(convertWikilinkText(line[cursor:match[0]], source, byPath, byTitle))
+			result.WriteString(line[match[0]:match[1]])
+			cursor = match[1]
+		}
+		result.WriteString(convertWikilinkText(line[cursor:], source, byPath, byTitle))
+	}
+	return result.String()
+}
+
+func convertWikilinkText(value string, source indexedNote, byPath, byTitle map[string]int64) string {
+	matches := wikilinkPreviewPattern.FindAllStringSubmatchIndex(value, -1)
+	if len(matches) == 0 {
+		return value
+	}
+	var result strings.Builder
+	cursor := 0
+	for _, match := range matches {
+		if match[0] > 0 && value[match[0]-1] == '!' {
+			continue
+		}
+		target := strings.TrimSpace(value[match[2]:match[3]])
+		noteID := resolveNoteLink(source, target, byPath, byTitle)
+		if noteID == 0 {
+			continue
+		}
+		label := target
+		if match[4] >= 0 {
+			if alias := strings.TrimSpace(value[match[4]:match[5]]); alias != "" {
+				label = alias
+			}
+		}
+		result.WriteString(value[cursor:match[0]])
+		result.WriteByte('[')
+		result.WriteString(escapeMarkdownLinkLabel(label))
+		result.WriteString("](?note=")
+		result.WriteString(strconv.FormatInt(noteID, 10))
+		result.WriteByte(')')
+		cursor = match[1]
+	}
+	if cursor == 0 {
+		return value
+	}
+	result.WriteString(value[cursor:])
+	return result.String()
+}
+
+func escapeMarkdownLinkLabel(value string) string {
+	replacer := strings.NewReplacer(
+		"\\", "\\\\", "[", "\\[", "]", "\\]",
+		"*", "\\*", "_", "\\_", "`", "\\`",
+	)
+	return replacer.Replace(value)
 }
 
 func (a *App) NoteGraph() (NoteGraph, error) {
