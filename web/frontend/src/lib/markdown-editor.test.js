@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ensureFrontmatterTags, extractMarkdownOutline, frontmatterLineOffset, highlightMarkdown, indentSelection, MarkdownEditor, parseFrontmatter, stripFrontmatter } from './markdown-editor.js';
+import { ensureFrontmatterTags, extractMarkdownOutline, frontmatterLineOffset, highlightCode, highlightMarkdown, indentSelection, MarkdownEditor, parseFrontmatter, stripFrontmatter } from './markdown-editor.js';
 
 function createTextarea(value, start = 0, end = start) {
     return {
@@ -159,4 +159,24 @@ test('highlights wikilinks in the Markdown editor', () => {
         highlightMarkdown('[[Target]] <unsafe>'),
         '<span class="md-wikilink">[[Target]]</span> &lt;unsafe&gt;'
     );
+});
+
+test('highlights Markdown structures and identifies fenced code languages', () => {
+    const highlighted = highlightMarkdown('# Título\n- **forte**\n```js\nconst answer = 42;\n```');
+    assert.match(highlighted, /class="md-heading"/);
+    assert.match(highlighted, /class="md-list"/);
+    assert.match(highlighted, /class="md-strong"/);
+    assert.match(highlighted, /class="md-code-language">js<\/span>/);
+    assert.match(highlighted, /class="syntax-keyword">const<\/span>/);
+    assert.match(highlighted, /class="syntax-number">42<\/span>/);
+    assert.equal(highlightMarkdown('**forte**'), '<span class="md-strong">**forte**</span>');
+});
+
+test('highlights supported code and escapes code from unsupported languages', () => {
+    assert.equal(
+        highlightCode('const value = "<unsafe>";', 'js'),
+        '<span class="syntax-keyword">const</span> value = <span class="syntax-string">"&lt;unsafe&gt;"</span>;'
+    );
+    assert.equal(highlightCode('<unsafe>', 'unknown'), '&lt;unsafe&gt;');
+    assert.match(highlightCode('<button type="button">', 'html'), /class="syntax-keyword">button<\/span>/);
 });

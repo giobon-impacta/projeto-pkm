@@ -10,7 +10,7 @@
 </head>
 <body class="panel-open">
     <aside class="activity-rail" aria-label="Navegação principal">
-        <button class="brand-mark" id="homeButton" type="button" aria-label="Voltar à pesquisa" title="Voltar à pesquisa">P</button>
+        <button class="brand-mark" id="homeButton" type="button" aria-label="Mostrar todas as notas" title="Todas as notas">P</button>
         <button class="rail-button is-active" type="button" data-panel="files" aria-label="Abrir pastas" title="Pastas">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h6l2 2h9v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M3.5 8.5v-2a2 2 0 0 1 2-2h3l2 2"/></svg>
         </button>
@@ -28,6 +28,9 @@
         <div class="rail-spacer"></div>
         <button class="rail-button" id="themeToggle" type="button" aria-label="Alternar tema" title="Alternar tema">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
+        </button>
+        <button class="rail-button" id="settingsButton" type="button" data-panel="settings" aria-label="Abrir configurações" title="Configurações">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.8 1l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.8-1l-1.7.7-1.4-2.4 1.4-1.1a7 7 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.7.7a8 8 0 0 1 1.8-1l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.8 1l1.7-.7 1.4 2.4-1.4 1.1a7 7 0 0 1 0 2Z"/></svg>
         </button>
     </aside>
 
@@ -152,6 +155,7 @@
             <div class="editor-workspace" data-editor-mode="split">
                 <section class="editor-pane edit-pane" aria-label="Edição Markdown">
                     <div class="source-editor">
+                        <pre id="noteContentHighlight" class="source-highlight" aria-hidden="true"></pre>
                         <textarea id="noteContent" name="content" spellcheck="false" aria-label="Conteúdo Markdown" aria-autocomplete="list" aria-controls="wikilinkAutocomplete" aria-expanded="false" placeholder="# Comece a escrever..."></textarea>
                     </div>
                 </section>

@@ -1,4 +1,4 @@
-import { ensureFrontmatterTags, extractMarkdownOutline, frontmatterLineOffset, MarkdownEditor, parseFrontmatter, stripFrontmatter } from './lib/markdown-editor.js';
+import { ensureFrontmatterTags, extractMarkdownOutline, frontmatterLineOffset, highlightCode, highlightMarkdown, MarkdownEditor, parseFrontmatter, stripFrontmatter } from './lib/markdown-editor.js';
 import { GraphView } from './lib/graph-view.js';
 import { getScrollSpacerHeight, mapEditorToPreview, mapPreviewToEditor } from './lib/scroll-sync.js';
 
@@ -74,6 +74,7 @@ const elements = {
     currentFolder: document.querySelector('#currentFolder'),
     noteTitle: document.querySelector('#noteTitle'),
     noteContent: document.querySelector('#noteContent'),
+    noteContentHighlight: document.querySelector('#noteContentHighlight'),
     markdownPreview: document.querySelector('#markdownPreview'),
     wikilinkAutocomplete: document.querySelector('#wikilinkAutocomplete'),
     attachmentsDialog: document.querySelector('#attachmentsDialog'),
@@ -95,6 +96,24 @@ const elements = {
     backupInput: document.querySelector('#backupInput')
 };
 
+function syncMarkdownHighlight() {
+    elements.noteContentHighlight.innerHTML = `${highlightMarkdown(elements.noteContent.value)}\n`;
+    elements.noteContentHighlight.scrollTop = elements.noteContent.scrollTop;
+    elements.noteContentHighlight.scrollLeft = elements.noteContent.scrollLeft;
+}
+
+function highlightPreviewCode() {
+    for (const code of elements.markdownPreview.querySelectorAll('pre > code')) {
+        const languageClass = [...code.classList].find(name => name.startsWith('language-'));
+        const language = languageClass?.slice('language-'.length) || '';
+        const safeLanguage = /^[\w+-]{1,30}$/.test(language) ? language : '';
+        const pre = code.parentElement;
+        if (safeLanguage) pre.dataset.language = safeLanguage;
+        else delete pre.dataset.language;
+        code.innerHTML = highlightCode(code.textContent, safeLanguage);
+    }
+}
+
 let previewTimer;
 let previewRequestID = 0;
 let renderedPreviewMarkdown = '';
@@ -103,11 +122,13 @@ let scrollSyncFrame = 0;
 let pendingScrollSource = null;
 let programmaticScroll = null;
 const markdownEditor = new MarkdownEditor(elements.noteContent, () => {
+    syncMarkdownHighlight();
     syncPreviewMinimumHeight();
     updatePreview();
     scheduleSave();
     refreshOutline();
 }, updateEditorHistoryButtons);
+syncMarkdownHighlight();
 const graphView = new GraphView(document.querySelector('#noteGraph'), id => void openNote(id));
 document.querySelector('#graphButton').addEventListener('click', () => {
     void openGraphView().catch(error => {
@@ -215,9 +236,7 @@ function setupEventListeners() {
         closePanel();
     });
     document.querySelector('#homeButton').addEventListener('click', () => {
-        if (state.view === 'editor') navigateBack();
-        else if (state.graphVisible) closeGraphView();
-        else elements.searchInput.focus();
+        void showAllNotes();
     });
     document.querySelector('#closePanel').addEventListener('click', closePanel);
     elements.panelResizer.addEventListener('pointerdown', startWorkspacePanelResize);
@@ -359,6 +378,8 @@ function setupEventListeners() {
     });
     elements.noteContent.addEventListener('scroll', () => {
         handleEditorScroll(elements.noteContent);
+        elements.noteContentHighlight.scrollTop = elements.noteContent.scrollTop;
+        elements.noteContentHighlight.scrollLeft = elements.noteContent.scrollLeft;
         if (state.wikilinkAutocomplete.open) renderWikilinkAutocomplete();
     });
     elements.markdownPreview.addEventListener('scroll', () => handleEditorScroll(elements.markdownPreview));
@@ -1523,6 +1544,24 @@ function navigateBack() {
     }
 }
 
+async function showAllNotes() {
+    const allNotes = { query: '', mode: 'title', folder: '', tag: '', offset: 0, graphVisible: false };
+    if (state.view === 'editor') {
+        await returnToList(allNotes, true);
+        return;
+    }
+    if (state.graphVisible) closeGraphView();
+    restoreListState(allNotes);
+    state.view = 'list';
+    state.noteID = null;
+    elements.editorView.hidden = true;
+    elements.newNote.hidden = false;
+    document.body.classList.remove('is-editor-view');
+    updateListHistory();
+    await loadNotes();
+    elements.searchInput.focus();
+}
+
 async function returnToList(listState, replace = false) {
     if (!(await flushSave())) return;
     const target = listState || { query: '', mode: 'title', folder: '', offset: 0 };
@@ -1695,6 +1734,7 @@ function updatePreview() {
             const html = await response.text();
             if (requestID === previewRequestID) {
                 elements.markdownPreview.innerHTML = html;
+                highlightPreviewCode();
                 renderFrontmatterProperties();
                 syncPreviewMinimumHeight();
                 renderedPreviewMarkdown = markdown;
@@ -2080,6 +2120,12 @@ function togglePanel(name) {
     } else if (name === 'outline') {
         elements.panelTitle.textContent = 'Sumário';
         renderOutlinePanel();
+    } else if (name === 'settings') {
+        elements.panelTitle.textContent = 'Configurações';
+        const placeholder = document.createElement('p');
+        placeholder.className = 'settings-placeholder';
+        placeholder.textContent = 'As configurações da aplicação aparecerão aqui.';
+        elements.panelContent.replaceChildren(placeholder);
     } else {
         elements.panelTitle.textContent = 'Pastas e notas';
         renderFolderPanel();

@@ -109,6 +109,7 @@ button { color: inherit; }
     color: var(--accent);
     background: var(--surface-hover);
 }
+.rail-button#settingsButton svg { width: 19px; height: 19px; }
 .backlinks-count { position: absolute; top: 0; right: 0; min-width: 15px; height: 15px; border-radius: 999px; padding: 0 3px; color: #fff; background: var(--accent); font-size: 9px; font-weight: 700; line-height: 15px; text-align: center; }
 .backlinks-panel-empty { padding: 22px 14px; color: var(--muted); text-align: center; }
 .backlinks-panel-empty p { margin: 0 0 6px; font-size: 12px; }
@@ -202,6 +203,7 @@ body.is-editor-view .main-content { display: flex; height: 100vh; min-height: 0;
 }
 
 .tree-root { color: var(--text); font-weight: 600; }
+.settings-placeholder { margin: 8px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .tree-row { display: flex; align-items: center; gap: 2px; }
 .tree-folder { flex: 1; }
 .tree-folder::before { content: "▤"; margin-right: 6px; color: var(--accent); }
@@ -435,13 +437,28 @@ body.is-editor-view .topbar-editor-actions { display: flex; }
 .editor-splitter:hover::before, .editor-splitter:focus-visible::before, body.is-resizing-editor .editor-splitter::before { border-color: var(--accent); background-color: var(--surface); }
 .editor-splitter:focus-visible { outline: none; }
 body.is-resizing-editor { cursor: col-resize; user-select: none; }
-.source-editor textarea { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; resize: none; overflow: auto; border: 0; padding: 12px; outline: 0; color: var(--text); background: transparent; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.65; tab-size: 4; white-space: pre-wrap; overflow-wrap: break-word; scrollbar-width: none; }
+.source-highlight, .source-editor textarea { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; border: 0; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.65; tab-size: 4; white-space: pre-wrap; overflow-wrap: break-word; }
+.source-highlight { z-index: 0; overflow: hidden; color: var(--text); pointer-events: none; }
+.source-editor textarea { z-index: 1; resize: none; overflow: auto; outline: 0; color: transparent; -webkit-text-fill-color: transparent; caret-color: var(--accent); background: transparent; scrollbar-width: none; }
+.source-editor textarea::selection { color: transparent; background: color-mix(in srgb, var(--accent) 35%, transparent); }
 .source-editor textarea::-webkit-scrollbar { display: none; }
 .markdown-preview::-webkit-scrollbar { width: 5px; height: 5px; }
 .markdown-preview::-webkit-scrollbar-track { background: transparent; }
 .markdown-preview::-webkit-scrollbar-thumb { border: 1px solid transparent; border-radius: 8px; background: color-mix(in srgb, var(--faint) 35%, transparent); background-clip: padding-box; }
 .markdown-preview::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--muted) 75%, transparent); background-clip: padding-box; }
-.source-editor textarea::placeholder { color: var(--faint); }
+.source-editor textarea::placeholder { color: var(--faint); -webkit-text-fill-color: var(--faint); }
+.md-heading { color: var(--accent); font-weight: 700; }
+.md-list, .md-quote { color: #b68bff; }
+.md-code, .md-code-fence { color: #e7a86f; }
+.md-code-language { border-radius: 3px; padding: 0 3px; color: #a7d7a1; background: color-mix(in srgb, #a7d7a1 12%, transparent); font-size: .9em; }
+.md-strong { color: #f0c674; font-weight: 700; }
+.md-emphasis { color: #d7a6e8; font-style: italic; }
+.md-link, .md-wikilink { color: var(--accent); }
+.syntax-keyword { color: #c792ea; }
+.syntax-string { color: #a7d7a1; }
+.syntax-comment { color: var(--faint); font-style: italic; }
+.syntax-number { color: #f0c674; }
+.syntax-function { color: #82aaff; }
 .wikilink-autocomplete { position: fixed; z-index: 40; width: min(360px, calc(100vw - 16px)); max-height: 248px; overflow: auto; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); box-shadow: 0 8px 24px #0006; }
 .wikilink-option { display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 6px 8px; border: 0; border-radius: 4px; color: var(--text); background: transparent; text-align: left; cursor: pointer; }
 .wikilink-option:hover, .wikilink-option.is-active { background: var(--surface-hover); }
@@ -455,7 +472,9 @@ body.is-resizing-editor { cursor: col-resize; user-select: none; }
 .markdown-preview p { margin: .55em 0; }
 .markdown-preview pre, .markdown-preview code { border-radius: 5px; background: var(--bg); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .markdown-preview code { padding: 2px 4px; color: var(--accent); }
-.markdown-preview pre { overflow: auto; padding: 10px; }
+.markdown-preview pre { position: relative; overflow: auto; padding: 30px 10px 10px; }
+.markdown-preview pre:not([data-language]) { padding-top: 10px; }
+.markdown-preview pre[data-language]::before { position: absolute; top: 8px; left: 10px; color: var(--muted); content: attr(data-language); font-size: 10px; line-height: 1; }
 .markdown-preview pre code { padding: 0; color: var(--text); }
 .markdown-preview a { color: var(--accent); }
 .markdown-preview blockquote { margin: 10px 0; padding-left: 12px; border-left: 2px solid var(--accent); color: var(--muted); }
@@ -493,15 +512,15 @@ body.is-resizing-editor { cursor: col-resize; user-select: none; }
         height: 60px;
         flex-direction: row;
         justify-content: center;
-        gap: clamp(14px, 7vw, 36px);
-        padding: 6px 12px;
+        gap: clamp(2px, 1vw, 8px);
+        padding: 6px;
         border-top: 1px solid var(--border);
         border-right: 0;
     }
 
     .brand-mark { display: grid; margin: 0; }
     .rail-spacer { display: none; }
-    .rail-button { width: 42px; height: 42px; }
+    .rail-button { width: 38px; height: 38px; }
     .workspace-panel { inset: auto 0 60px; width: 100%; max-height: min(62vh, 500px); border-right: 0; border-top: 1px solid var(--border); border-radius: 12px 12px 0 0; box-shadow: 0 -14px 36px #0005; }
     .workspace-panel-resizer { display: none !important; }
     .main-content, body.panel-open .main-content { min-height: calc(100vh - 60px); margin: 0 0 60px; padding: 0 16px 30px; }
