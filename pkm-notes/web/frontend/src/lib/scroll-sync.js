@@ -14,6 +14,11 @@ function interpolate(value, anchors, inputKey, outputKey) {
     return before[outputKey] + progress * outputSpan;
 }
 
+export function getScrollSpacerHeight(sourceScrollable, previewContentHeight, previewViewportHeight) {
+    if (sourceScrollable <= 0) return 0;
+    return Math.max(0, previewViewportHeight + sourceScrollable - previewContentHeight);
+}
+
 export function mapEditorToPreview(scrollTop, editorScrollable, previewScrollable, landmarks = []) {
     if (editorScrollable <= 0 || previewScrollable <= 0) return 0;
     const anchors = [{ editorPct: 0, previewTop: 0 }];

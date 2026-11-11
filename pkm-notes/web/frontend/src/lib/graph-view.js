@@ -1,6 +1,5 @@
 const svgNS = 'http://www.w3.org/2000/svg';
-const nodeWidth = 154;
-const nodeHeight = 32;
+const nodeRadius = 14;
 
 function seededPosition(id, index, width, height, count) {
     let seed = Math.imul(Number(id) || index + 1, 2654435761) >>> 0;
@@ -218,8 +217,14 @@ export class GraphView {
             const source = byID.get(Number(edge.source));
             const target = byID.get(Number(edge.target));
             if (!source || !target) continue;
+            const distance = Math.hypot(target.x - source.x, target.y - source.y) || 1;
+            const unitX = (target.x - source.x) / distance;
+            const unitY = (target.y - source.y) / distance;
             const edgeElement = svgElement('line', {
-                x1: source.x, y1: source.y, x2: target.x, y2: target.y,
+                x1: source.x + unitX * nodeRadius,
+                y1: source.y + unitY * nodeRadius,
+                x2: target.x - unitX * nodeRadius,
+                y2: target.y - unitY * nodeRadius,
                 class: `graph-edge${edge.type === 'wikilink' ? ' is-wikilink' : ''}`,
                 'data-source': edge.source, 'data-target': edge.target,
                 'marker-end': 'url(#graph-arrow)'
@@ -236,20 +241,15 @@ export class GraphView {
                 'data-node-id': node.id
             });
             const label = node.title.length > 23 ? `${node.title.slice(0, 22)}…` : node.title;
-            const rect = svgElement('rect', {
-                x: -nodeWidth / 2, y: -nodeHeight / 2,
-                width: nodeWidth, height: nodeHeight, rx: 9,
+            const circle = svgElement('circle', {
+                cx: 0, cy: 0, r: nodeRadius,
                 class: 'graph-node-shape'
             });
-            const dot = svgElement('circle', {
-                cx: -nodeWidth / 2 + 13, cy: 0, r: 4 + Math.min(node.degree, 5) * 0.7,
-                class: 'graph-node-dot'
-            });
-            const text = svgElement('text', { x: -nodeWidth / 2 + 25, y: 4, class: 'graph-node-label' });
+            const text = svgElement('text', { x: 0, y: nodeRadius + 16, class: 'graph-node-label' });
             text.textContent = label;
             const title = svgElement('title');
             title.textContent = `${node.title}${node.folder ? ` · ${node.folder}` : ''} (${node.degree} conexões)`;
-            group.append(rect, dot, text, title);
+            group.append(circle, text, title);
             nodesGroup.append(group);
         }
         viewport.append(edgesGroup, nodesGroup);

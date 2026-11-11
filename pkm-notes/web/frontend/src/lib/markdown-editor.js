@@ -336,3 +336,93 @@ export function stripFrontmatter(content) {
     const closeIndex = lines.findIndex((line, index) => index > 0 && ['---', '...'].includes(line.trim()));
     return closeIndex < 0 ? content : lines.slice(closeIndex + 1).join('\n').replace(/^\s*\n/, '');
 }
+
+export function parseFrontmatter(content) {
+    const lines = content.split('\n');
+    if (lines[0]?.trim() !== '---') return null;
+    const closeIndex = lines.findIndex((line, index) => index > 0 && ['---', '...'].includes(line.trim()));
+    if (closeIndex < 0) return null;
+
+    const metadata = {};
+    let currentKey = null;
+    let currentValue = [];
+    const parseValue = raw => {
+        const value = raw.trim();
+        if (!value) return null;
+        if (value.startsWith('[') && value.endsWith(']')) {
+            return value.slice(1, -1).split(',').map(item => item.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+        }
+        if (/^(true|false)$/i.test(value)) return value.toLowerCase() === 'true';
+        if (/^-?\d+(?:\.\d+)?$/.test(value)) return Number(value);
+        if (/^(null|~)$/i.test(value)) return null;
+        return value.replace(/^["']|["']$/g, '');
+    };
+    const saveValue = () => {
+        if (currentKey === null) return;
+        const listItems = currentValue
+            .map(line => line.match(/^\s+-\s*(.*)$/)?.[1])
+            .filter(value => value !== undefined)
+            .map(parseValue)
+            .filter(value => value !== null);
+        metadata[currentKey] = listItems.length
+            ? listItems
+            : parseValue(currentValue.join('\n'));
+    };
+
+    for (const line of lines.slice(1, closeIndex)) {
+        const keyValue = line.match(/^([a-zA-Z_][\w-]*):\s*(.*)$/);
+        if (keyValue) {
+            saveValue();
+            currentKey = keyValue[1];
+            currentValue = [keyValue[2]];
+        } else if (currentKey && /^\s+/.test(line)) {
+            currentValue.push(line);
+        }
+    }
+    saveValue();
+    return Object.keys(metadata).length ? metadata : null;
+}
+
+export function extractMarkdownOutline(content) {
+    const lines = content.split('\n');
+    const outline = [];
+    let inFrontmatter = lines[0]?.trim() === '---';
+    let inFence = null;
+    for (let index = 0; index < lines.length; index++) {
+        const line = lines[index];
+        if (inFrontmatter) {
+            if (index > 0 && ['---', '...'].includes(line.trim())) inFrontmatter = false;
+            continue;
+        }
+        const fence = line.match(/^ {0,3}(`{3,}|~{3,})/);
+        if (inFence) {
+            if (fence && fence[1][0] === inFence.character && fence[1].length >= inFence.length) inFence = null;
+            continue;
+        }
+        if (fence) {
+            inFence = { character: fence[1][0], length: fence[1].length };
+            continue;
+        }
+
+        const atx = line.match(/^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
+        if (atx) {
+            outline.push({
+                level: atx[1].length,
+                text: atx[2].trim(),
+                line: index
+            });
+            continue;
+        }
+        if (index > 0 && line.trim() && /^ {0,3}(=+|-+)\s*$/.test(line) && lines[index - 1].trim()) {
+            outline.push({
+                level: line.trim()[0] === '=' ? 1 : 2,
+                text: lines[index - 1].trim(),
+                line: index - 1
+            });
+        }
+    }
+
+    if (inFrontmatter) return [];
+    const bodyLineOffset = lines.length - stripFrontmatter(content).split('\n').length;
+    return outline.map(heading => ({ ...heading, bodyLine: heading.line - bodyLineOffset }));
+}

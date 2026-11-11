@@ -1,6 +1,6 @@
-import { ensureFrontmatterTags, highlightMarkdown, MarkdownEditor, stripFrontmatter } from './lib/markdown-editor.js';
+import { ensureFrontmatterTags, extractMarkdownOutline, MarkdownEditor, parseFrontmatter, stripFrontmatter } from './lib/markdown-editor.js';
 import { GraphView } from './lib/graph-view.js';
-import { mapEditorToPreview, mapPreviewToEditor } from './lib/scroll-sync.js';
+import { getScrollSpacerHeight, mapEditorToPreview, mapPreviewToEditor } from './lib/scroll-sync.js';
 
 const pageSize = 30;
 const treePageSize = 100;
@@ -19,8 +19,14 @@ const state = {
     graphVisible: false,
     graphData: null,
     graphRequestID: 0,
+    backlinks: null,
+    backlinksError: '',
+    backlinksRequestID: 0,
+    outline: [],
+    pendingOutlineLine: null,
     noteID: null,
     noteFolder: '',
+    frontmatterExpanded: false,
     savedDraft: null,
     listState: null,
     directEntry: false,
@@ -38,6 +44,7 @@ const state = {
     }
 };
 let editorSplitPercent = 50;
+let workspacePanelWidth = 280;
 
 const elements = {
     searchView: document.querySelector('#searchView'),
@@ -52,13 +59,21 @@ const elements = {
     previousPage: document.querySelector('#previousPage'),
     nextPage: document.querySelector('#nextPage'),
     panel: document.querySelector('#workspacePanel'),
+    panelResizer: document.querySelector('#workspacePanelResizer'),
     panelTitle: document.querySelector('#panelTitle'),
     panelContent: document.querySelector('#panelContent'),
+    backlinksCount: document.querySelector('#backlinksCount'),
+    outlineCount: document.querySelector('#outlineCount'),
+    currentFolder: document.querySelector('#currentFolder'),
     noteTitle: document.querySelector('#noteTitle'),
     noteContent: document.querySelector('#noteContent'),
-    sourceHighlight: document.querySelector('#sourceHighlight'),
     markdownPreview: document.querySelector('#markdownPreview'),
     wikilinkAutocomplete: document.querySelector('#wikilinkAutocomplete'),
+    attachmentsDialog: document.querySelector('#attachmentsDialog'),
+    attachmentsButton: document.querySelector('#attachmentsButton'),
+    attachmentInput: document.querySelector('#attachmentInput'),
+    attachmentList: document.querySelector('#attachmentList'),
+    attachmentsEmpty: document.querySelector('#attachmentsEmpty'),
     editorWorkspace: document.querySelector('.editor-workspace'),
     saveStatus: document.querySelector('#saveStatus'),
     appMessage: document.querySelector('#appMessage'),
@@ -74,9 +89,10 @@ let scrollSyncFrame = 0;
 let pendingScrollSource = null;
 let programmaticScroll = null;
 const markdownEditor = new MarkdownEditor(elements.noteContent, () => {
+    syncPreviewMinimumHeight();
     updatePreview();
-    updateHighlight();
     scheduleSave();
+    refreshOutline();
 }, updateEditorHistoryButtons);
 const graphView = new GraphView(document.querySelector('#noteGraph'), id => void openNote(id));
 document.querySelector('#graphButton').addEventListener('click', () => {
@@ -101,6 +117,8 @@ function resizeSplit(event) {
     if (!bounds.width) return;
     editorSplitPercent = Math.min(80, Math.max(20, ((event.clientX - bounds.left) / bounds.width) * 100));
     updateSplitRatio();
+    syncPreviewMinimumHeight();
+    syncEditorScrollFromSource();
 }
 
 function stopSplitResize(event) {
@@ -144,6 +162,9 @@ async function initialize() {
         return;
     }
     setupTheme();
+    const savedPanelWidth = Number(localStorage.getItem('workspacePanelWidth'));
+    if (Number.isFinite(savedPanelWidth) && savedPanelWidth > 0) workspacePanelWidth = savedPanelWidth;
+    setWorkspacePanelWidth(workspacePanelWidth);
     const savedSplit = Number(localStorage.getItem('editorSplitPercent'));
     if (Number.isFinite(savedSplit)) editorSplitPercent = Math.min(80, Math.max(20, savedSplit));
     updateSplitRatio();
@@ -168,12 +189,25 @@ function setupEventListeners() {
     document.querySelectorAll('.rail-button[data-panel]').forEach(button => {
         button.addEventListener('click', () => togglePanel(button.dataset.panel));
     });
+    document.addEventListener('click', event => {
+        if (!document.body.classList.contains('panel-open')) return;
+        if (elements.panel.contains(event.target) ||
+            elements.panelResizer.contains(event.target) ||
+            event.target.closest('.rail-button[data-panel]')) return;
+        closePanel();
+    });
     document.querySelector('#homeButton').addEventListener('click', () => {
         if (state.view === 'editor') navigateBack();
         else if (state.graphVisible) closeGraphView();
         else elements.searchInput.focus();
     });
     document.querySelector('#closePanel').addEventListener('click', closePanel);
+    elements.panelResizer.addEventListener('pointerdown', startWorkspacePanelResize);
+    elements.panelResizer.addEventListener('pointermove', resizeWorkspacePanel);
+    elements.panelResizer.addEventListener('pointerup', stopWorkspacePanelResize);
+    elements.panelResizer.addEventListener('pointercancel', stopWorkspacePanelResize);
+    elements.panelResizer.addEventListener('keydown', handleWorkspacePanelResizeKey);
+    window.addEventListener('resize', () => setWorkspacePanelWidth(workspacePanelWidth));
     document.querySelector('#closeGraph').addEventListener('click', closeGraphView);
     document.querySelector('#fitGraph').addEventListener('click', () => graphView.fit());
     document.querySelector('#graphSearch').addEventListener('input', event => graphView.setSearch(event.target.value));
@@ -188,16 +222,21 @@ function setupEventListeners() {
             showMessage(`Não foi possível encerrar a sessão: ${error.message}`, 'error');
         }
     });
-    document.querySelector('#addAttachment').addEventListener('click', async () => {
-        if (!(await flushSave())) return;
-        document.querySelector('#attachmentInput').click();
+    elements.attachmentsButton.addEventListener('click', () => {
+        elements.attachmentsDialog.showModal();
+        if (state.noteID !== null) void loadAttachments(state.noteID);
     });
-    document.querySelector('#attachmentInput').addEventListener('change', event => {
+    document.querySelector('#closeAttachments').addEventListener('click', () => elements.attachmentsDialog.close());
+    elements.attachmentsDialog.addEventListener('click', event => {
+        if (event.target === elements.attachmentsDialog) elements.attachmentsDialog.close();
+    });
+    document.querySelector('#addAttachment').addEventListener('click', () => elements.attachmentInput.click());
+    elements.attachmentInput.addEventListener('change', event => {
         const files = [...event.target.files];
         event.target.value = '';
         if (files.length) void uploadAttachments(files);
     });
-    document.querySelector('#attachmentList').addEventListener('click', event => {
+    elements.attachmentList.addEventListener('click', event => {
         const button = event.target.closest('[data-delete-attachment]');
         if (button) void deleteAttachment(Number(button.dataset.deleteAttachment));
     });
@@ -241,6 +280,7 @@ function setupEventListeners() {
     elements.notesList.addEventListener('click', handleNoteListClick);
     elements.noteContent.addEventListener('input', () => {
         markdownEditor.handleInput();
+        syncPreviewMinimumHeight();
         scheduleWikilinkSuggestions();
     });
     elements.noteContent.addEventListener('keydown', event => {
@@ -269,6 +309,12 @@ function setupEventListeners() {
         updateWikilinkActiveOption();
     });
     elements.markdownPreview.addEventListener('click', event => {
+        const frontmatterToggle = event.target.closest('[data-frontmatter-toggle]');
+        if (frontmatterToggle) {
+            state.frontmatterExpanded = !state.frontmatterExpanded;
+            renderFrontmatterProperties();
+            return;
+        }
         const link = event.target.closest('a[href]');
         if (!link) return;
         const params = new URLSearchParams(link.getAttribute('href').replace(/^\?/, ''));
@@ -284,10 +330,18 @@ function setupEventListeners() {
     elements.markdownPreview.addEventListener('scroll', () => handleEditorScroll(elements.markdownPreview));
     window.addEventListener('resize', () => {
         editorLinePositionCache = null;
+        if (state.view === 'editor' && window.matchMedia('(max-width: 700px)').matches &&
+            elements.editorWorkspace.dataset.editorMode === 'split') {
+            setEditorMode('edit');
+        }
+        syncPreviewMinimumHeight();
         syncEditorScrollFromSource();
         if (state.wikilinkAutocomplete.open) renderWikilinkAutocomplete();
     });
-    elements.noteTitle.addEventListener('input', scheduleSave);
+    elements.noteTitle.addEventListener('input', () => {
+        updateEditorBreadcrumb();
+        scheduleSave();
+    });
     const splitter = document.querySelector('.editor-splitter');
     splitter.addEventListener('pointerdown', startSplitResize);
     splitter.addEventListener('pointermove', resizeSplit);
@@ -301,7 +355,6 @@ function setupEventListeners() {
         const button = event.target.closest('[data-format]');
         if (button) markdownEditor.format(button.dataset.format);
     });
-    document.querySelector('#saveNow').addEventListener('click', () => void flushSave());
     document.querySelectorAll('[data-editor-mode]').forEach(button => {
         button.addEventListener('click', () => setEditorMode(button.dataset.editorMode));
     });
@@ -331,7 +384,8 @@ function setupEventListeners() {
             void openNewNote();
         }
         if (state.view === 'editor' && event.key === 'Escape' && !event.defaultPrevented) {
-            navigateBack();
+            if (elements.attachmentsDialog.open) elements.attachmentsDialog.close();
+            else navigateBack();
         }
         if (state.view === 'list' && state.graphVisible && event.key === 'Escape' && !event.defaultPrevented) {
             closeGraphView();
@@ -370,7 +424,10 @@ async function openGraphView() {
         history.pushState({ view: 'list', list: { ...listState, graphVisible: true } }, '', location.pathname);
         state.view = 'list';
         state.noteID = null;
+        resetBacklinks();
+        resetOutline();
         state.directEntry = false;
+        document.body.classList.remove('is-editor-view');
         elements.editorView.hidden = true;
         elements.newNote.hidden = false;
         restoreListState({ ...listState, graphVisible: false });
@@ -827,7 +884,9 @@ async function openNote(id, { push = true } = {}) {
 function showEditor(note) {
     window.clearTimeout(state.saveTimer);
     closeWikilinkAutocomplete();
+    elements.attachmentsDialog.close();
     if (window.matchMedia('(max-width: 700px)').matches) closePanel();
+    document.body.classList.add('is-editor-view');
     state.view = 'editor';
     state.noteID = note?.id ?? null;
     elements.searchView.hidden = true;
@@ -835,24 +894,46 @@ function showEditor(note) {
     elements.editorView.hidden = false;
     elements.newNote.hidden = true;
     elements.noteTitle.value = note?.title || '';
+    state.frontmatterExpanded = false;
     state.noteFolder = note ? note.folder : state.folder;
     elements.deleteCurrentNote.hidden = !note;
-    document.querySelector('#attachmentsPanel').hidden = !note;
-    document.querySelector('#attachmentList').replaceChildren();
+    elements.attachmentList.replaceChildren();
+    elements.attachmentList.hidden = true;
+    elements.attachmentsEmpty.hidden = false;
+    elements.attachmentsButton.title = 'Abrir anexos';
+    elements.attachmentsButton.setAttribute('aria-label', 'Abrir anexos');
+    resetBacklinks();
     elements.saveStatus.className = 'save-status';
     elements.saveStatus.textContent = note ? 'Salvo' : 'Rascunho';
     const content = note ? ensureFrontmatterTags(note.content, note.tags || []) : '';
+    state.outline = extractMarkdownOutline(content);
+    updateOutlineCount();
     renderedPreviewMarkdown = '';
     editorLinePositionCache = null;
     elements.noteContent.value = content;
     state.savedDraft = getDraft();
     markdownEditor.setValue(content);
     const savedMode = localStorage.getItem('editorMode');
-    setEditorMode(['edit', 'split', 'preview'].includes(savedMode) ? savedMode : 'split');
+    const preferredMode = ['edit', 'split', 'preview'].includes(savedMode) ? savedMode : 'split';
+    setEditorMode(window.matchMedia('(max-width: 700px)').matches && preferredMode === 'split'
+        ? 'edit'
+        : preferredMode);
     updatePreview();
     elements.noteContent.focus();
-    document.querySelector('#currentFolder').textContent = note ? (note.folder || 'Sem pasta') : (state.folder || 'Nova nota');
-    if (note) void loadAttachments(note.id);
+    updateEditorBreadcrumb();
+    if (note) {
+        void loadAttachments(note.id);
+        void loadBacklinks(note.id);
+    } else if (elements.panel.dataset.panel === 'backlinks') {
+        renderBacklinksPanel();
+    } else if (elements.panel.dataset.panel === 'outline') {
+        renderOutlinePanel();
+    }
+}
+
+function updateEditorBreadcrumb() {
+    elements.currentFolder.textContent = state.noteFolder || 'Sem pasta';
+    elements.noteTitle.title = elements.noteTitle.value || 'Título da nota';
 }
 
 function getDraft() {
@@ -906,19 +987,20 @@ async function persistDraft() {
                 state.noteID = saved.id;
                 updatePreview();
                 elements.deleteCurrentNote.hidden = false;
-                document.querySelector('#attachmentsPanel').hidden = false;
                 void loadAttachments(saved.id);
                 const current = history.state || {};
                 history.replaceState({ ...current, view: 'editor', noteId: saved.id, list: state.listState }, '', `?note=${saved.id}`);
             }
+            void loadBacklinks(state.noteID);
             if (JSON.stringify(getDraft()) === JSON.stringify(draft)) {
                 elements.noteTitle.value = saved.title;
                 state.noteFolder = saved.folder;
                 state.savedDraft = getDraft();
+                updateEditorBreadcrumb();
             } else {
                 state.savedDraft = draft;
             }
-            document.querySelector('#currentFolder').textContent = note.folder || 'Sem pasta';
+            updateEditorBreadcrumb();
             setSaveStatus('Salvo automaticamente', 'saved');
             state.folderNotesGeneration++;
             state.folderNotes.clear();
@@ -974,7 +1056,7 @@ async function loadAttachments(noteID) {
 }
 
 function renderAttachments(attachments, noteID) {
-    const list = document.querySelector('#attachmentList');
+    const list = elements.attachmentList;
     list.replaceChildren();
     for (const attachment of attachments) {
         const item = document.createElement('li');
@@ -992,6 +1074,11 @@ function renderAttachments(attachments, noteID) {
         item.append(link, remove);
         list.append(item);
     }
+    list.hidden = attachments.length === 0;
+    elements.attachmentsEmpty.hidden = attachments.length !== 0;
+    const label = attachments.length ? `Anexos (${attachments.length})` : 'Abrir anexos';
+    elements.attachmentsButton.title = label;
+    elements.attachmentsButton.setAttribute('aria-label', label);
 }
 
 function formatFileSize(size) {
@@ -1076,6 +1163,9 @@ async function returnToList(listState, replace = false) {
     if (replace) history.replaceState({ view: 'list', list: target }, '', location.pathname);
     state.view = 'list';
     state.noteID = null;
+    resetBacklinks();
+    resetOutline();
+    document.body.classList.remove('is-editor-view');
     state.directEntry = false;
     restoreListState(target);
     elements.editorView.hidden = true;
@@ -1135,8 +1225,11 @@ async function handlePopState(event) {
     state.listState = target.list || state.listState;
     state.directEntry = false;
     state.view = 'list';
+    document.body.classList.remove('is-editor-view');
     restoreListState(state.listState || {});
     state.noteID = null;
+    resetBacklinks();
+    resetOutline();
     elements.editorView.hidden = true;
     elements.graphView.hidden = !state.graphVisible;
     elements.searchView.hidden = state.graphVisible;
@@ -1156,6 +1249,8 @@ async function deleteCurrentNote() {
         state.savedDraft = getDraft();
         showMessage('Nota excluída.', 'success');
         state.noteID = null;
+        resetBacklinks();
+        resetOutline();
         state.folderNotesGeneration++;
         state.folderNotes.clear();
         navigateBack();
@@ -1184,6 +1279,8 @@ async function deleteNote(id) {
         if (deletingCurrent) {
             state.savedDraft = getDraft();
             state.noteID = null;
+            resetBacklinks();
+            resetOutline();
             if (state.directEntry) await returnToList(state.listState || captureListState(), true);
             else history.back();
             void Promise.all([loadFolders(), loadNotes()]);
@@ -1205,8 +1302,10 @@ function updatePreview() {
     const markdown = stripFrontmatter(elements.noteContent.value);
     if (!markdown.trim()) {
         elements.markdownPreview.textContent = '';
+        renderFrontmatterProperties();
         renderedPreviewMarkdown = markdown;
         editorLinePositionCache = null;
+        syncPreviewMinimumHeight();
         syncEditorScrollFromSource();
         return;
     }
@@ -1228,26 +1327,138 @@ function updatePreview() {
             const html = await response.text();
             if (requestID === previewRequestID) {
                 elements.markdownPreview.innerHTML = html;
+                renderFrontmatterProperties();
+                syncPreviewMinimumHeight();
                 renderedPreviewMarkdown = markdown;
                 annotatePreviewLandmarks(markdown);
                 syncEditorScrollFromSource();
+                if (state.pendingOutlineLine !== null) {
+                    const pendingLine = state.pendingOutlineLine;
+                    state.pendingOutlineLine = null;
+                    requestAnimationFrame(() => scrollToOutlineHeading(pendingLine));
+                }
             }
         } catch (error) {
             if (requestID === previewRequestID) {
                 elements.markdownPreview.textContent = `Falha ao renderizar Markdown: ${error.message}`;
                 renderedPreviewMarkdown = '';
+                renderFrontmatterProperties();
+                syncPreviewMinimumHeight();
+                syncEditorScrollFromSource();
             }
         }
     }, 140);
 }
 
-function updateHighlight() {
-    elements.sourceHighlight.innerHTML = `${highlightMarkdown(elements.noteContent.value)}\n`;
+function renderFrontmatterProperties() {
+    elements.markdownPreview.querySelector('.frontmatter-properties')?.remove();
+    const metadata = parseFrontmatter(elements.noteContent.value);
+    if (!metadata) return;
+
+    const panel = document.createElement('section');
+    panel.className = 'frontmatter-properties';
+    panel.setAttribute('aria-label', 'Propriedades da nota');
+
+    const tagsValue = metadata.tags;
+    const tags = tagsValue === undefined || tagsValue === null
+        ? []
+        : (Array.isArray(tagsValue) ? tagsValue : [tagsValue]).map(String);
+    const priority = ['date', 'created', 'author', 'status', 'priority', 'type', 'category'];
+    const priorityFields = priority
+        .filter(key => metadata[key] !== undefined && metadata[key] !== null && !Array.isArray(metadata[key]))
+        .slice(0, 3);
+
+    const summary = document.createElement('button');
+    summary.type = 'button';
+    summary.className = 'frontmatter-summary';
+    summary.dataset.frontmatterToggle = '';
+    summary.setAttribute('aria-expanded', String(state.frontmatterExpanded));
+    summary.setAttribute('aria-label', state.frontmatterExpanded
+        ? 'Recolher propriedades da nota'
+        : 'Expandir propriedades da nota');
+
+    const summaryLabel = document.createElement('span');
+    summaryLabel.className = 'frontmatter-summary-label';
+    summaryLabel.textContent = '⚙ Propriedades';
+    summary.append(summaryLabel);
+    for (const tag of tags.slice(0, 5)) {
+        const chip = document.createElement('span');
+        chip.className = 'frontmatter-tag';
+        chip.textContent = `#${tag}`;
+        summary.append(chip);
+    }
+    if (tags.length > 5) {
+        const more = document.createElement('span');
+        more.className = 'frontmatter-muted';
+        more.textContent = `+${tags.length - 5}`;
+        summary.append(more);
+    }
+    for (const key of priorityFields) {
+        const field = document.createElement('span');
+        field.className = 'frontmatter-summary-field';
+        field.textContent = `${key}: ${metadata[key]}`;
+        summary.append(field);
+    }
+    const summaryChevron = document.createElement('span');
+    summaryChevron.className = 'frontmatter-chevron';
+    summaryChevron.textContent = '▼';
+    summary.append(summaryChevron);
+    if (!state.frontmatterExpanded) panel.append(summary);
+
+    if (state.frontmatterExpanded) {
+        const details = document.createElement('div');
+        details.className = 'frontmatter-details';
+        const header = document.createElement('button');
+        header.type = 'button';
+        header.className = 'frontmatter-details-header';
+        header.dataset.frontmatterToggle = '';
+        header.setAttribute('aria-expanded', 'true');
+        header.textContent = '⚙ Propriedades · Recolher ▲';
+        details.append(header);
+
+        for (const [key, rawValue] of Object.entries(metadata)) {
+            const row = document.createElement('div');
+            row.className = 'frontmatter-row';
+            const name = document.createElement('span');
+            name.className = 'frontmatter-key';
+            name.textContent = key;
+            const value = document.createElement('span');
+            value.className = 'frontmatter-value';
+            const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+            value.textContent = values.map(item => item === null ? '' : String(item)).join(', ');
+            row.append(name, value);
+            details.append(row);
+        }
+        panel.append(details);
+    }
+    elements.markdownPreview.prepend(panel);
 }
 
-function syncHighlightScroll() {
-    elements.sourceHighlight.scrollTop = elements.noteContent.scrollTop;
-    elements.sourceHighlight.scrollLeft = elements.noteContent.scrollLeft;
+function syncPreviewMinimumHeight() {
+    const preview = elements.markdownPreview;
+    let spacer = preview.querySelector(':scope > .preview-scroll-spacer');
+    if (elements.noteContent.clientHeight === 0 || preview.clientHeight === 0) {
+        spacer?.remove();
+        return;
+    }
+    const contentEnd = spacer ? spacer.previousElementSibling : preview.lastElementChild;
+    const contentHeight = contentEnd
+        ? Math.max(0, contentEnd.getBoundingClientRect().bottom - preview.getBoundingClientRect().top + preview.scrollTop)
+        : 0;
+    const neededHeight = getScrollSpacerHeight(
+        Math.max(0, elements.noteContent.scrollHeight - elements.noteContent.clientHeight),
+        contentHeight,
+        preview.clientHeight
+    );
+    if (neededHeight > 0 && !spacer) {
+        spacer = document.createElement('div');
+        spacer.className = 'preview-scroll-spacer';
+        preview.append(spacer);
+    }
+    if (spacer) {
+        if (neededHeight > 0) spacer.style.height = `${neededHeight}px`;
+        else spacer.remove();
+    }
 }
 
 function scanMarkdownLandmarks(markdown) {
@@ -1416,10 +1627,7 @@ function handleEditorScroll(source) {
     if (programmaticScroll?.element === source) {
         const matched = Math.abs(source.scrollTop - programmaticScroll.scrollTop) < 1;
         programmaticScroll = null;
-        if (matched) {
-            if (source === elements.noteContent) syncHighlightScroll();
-            return;
-        }
+        if (matched) return;
     }
     pendingScrollSource = source;
     if (scrollSyncFrame) return;
@@ -1440,12 +1648,10 @@ function handleEditorScroll(source) {
             programmaticScroll = { element: target, scrollTop: targetTop };
             target.scrollTop = targetTop;
         }
-        syncHighlightScroll();
     });
 }
 
 function syncEditorScrollFromSource() {
-    syncHighlightScroll();
     const editor = elements.noteContent;
     const preview = elements.markdownPreview;
     const targetTop = mapEditorToPreview(
@@ -1466,6 +1672,7 @@ function updateEditorHistoryButtons({ canUndo, canRedo }) {
 }
 
 function setEditorMode(mode) {
+    if (mode === 'split' && window.matchMedia('(max-width: 700px)').matches) mode = 'edit';
     elements.editorWorkspace.dataset.editorMode = mode;
     localStorage.setItem('editorMode', mode);
     document.querySelectorAll('[data-editor-mode]').forEach(button => {
@@ -1473,7 +1680,10 @@ function setEditorMode(mode) {
         button.classList.toggle('is-active', active);
         button.setAttribute('aria-pressed', String(active));
     });
-    requestAnimationFrame(() => syncEditorScrollFromSource());
+    requestAnimationFrame(() => {
+        syncPreviewMinimumHeight();
+        syncEditorScrollFromSource();
+    });
 }
 
 function togglePanel(name) {
@@ -1484,13 +1694,274 @@ function togglePanel(name) {
     elements.panel.dataset.panel = name;
     document.body.classList.add('panel-open');
     document.querySelectorAll('.rail-button[data-panel]').forEach(button => button.classList.toggle('is-active', button.dataset.panel === name));
-    elements.panelTitle.textContent = 'Pastas e notas';
-    renderFolderPanel();
+    if (name === 'backlinks') {
+        elements.panelTitle.textContent = 'Backlinks';
+        renderBacklinksPanel();
+        if (state.noteID !== null && state.backlinks === null) void loadBacklinks(state.noteID);
+    } else if (name === 'outline') {
+        elements.panelTitle.textContent = 'Sumário';
+        renderOutlinePanel();
+    } else {
+        elements.panelTitle.textContent = 'Pastas e notas';
+        renderFolderPanel();
+    }
+}
+
+function getWorkspacePanelWidthBounds() {
+    const max = Math.max(220, Math.min(640, window.innerWidth - 58 - 80));
+    return { min: Math.min(220, max), max };
+}
+
+function setWorkspacePanelWidth(width, persist = false) {
+    const { min, max } = getWorkspacePanelWidthBounds();
+    workspacePanelWidth = Math.round(Math.min(max, Math.max(min, width)));
+    document.documentElement.style.setProperty('--workspace-panel-width', `${workspacePanelWidth}px`);
+    elements.panelResizer.setAttribute('aria-valuemax', String(max));
+    elements.panelResizer.setAttribute('aria-valuenow', String(workspacePanelWidth));
+    if (persist) localStorage.setItem('workspacePanelWidth', String(workspacePanelWidth));
+}
+
+function startWorkspacePanelResize(event) {
+    if (event.button !== 0 || window.matchMedia('(max-width: 700px)').matches) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    document.body.classList.add('is-resizing-workspace-panel');
+    resizeWorkspacePanel(event);
+}
+
+function resizeWorkspacePanel(event) {
+    if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
+    setWorkspacePanelWidth(event.clientX - 58);
+}
+
+function stopWorkspacePanelResize(event) {
+    if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    document.body.classList.remove('is-resizing-workspace-panel');
+    setWorkspacePanelWidth(workspacePanelWidth, true);
+}
+
+function handleWorkspacePanelResizeKey(event) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const { min, max } = getWorkspacePanelWidthBounds();
+    const width = event.key === 'Home' ? min
+        : event.key === 'End' ? max
+            : workspacePanelWidth + (event.key === 'ArrowRight' ? 20 : -20);
+    setWorkspacePanelWidth(width, true);
 }
 
 function closePanel() {
     document.body.classList.remove('panel-open');
     document.querySelectorAll('.rail-button[data-panel]').forEach(button => button.classList.remove('is-active'));
+}
+
+async function loadBacklinks(noteID) {
+    const requestID = ++state.backlinksRequestID;
+    state.backlinks = null;
+    state.backlinksError = '';
+    updateBacklinksCount();
+    if (elements.panel.dataset.panel === 'backlinks') renderBacklinksPanel();
+    try {
+        const backlinks = await requestJSON(`/api/notes/${noteID}/backlinks`);
+        if (requestID !== state.backlinksRequestID || state.noteID !== noteID) return;
+        if (!Array.isArray(backlinks)) throw new Error('resposta de backlinks inválida');
+        state.backlinks = backlinks;
+        state.backlinksError = '';
+        updateBacklinksCount();
+        if (elements.panel.dataset.panel === 'backlinks') renderBacklinksPanel();
+    } catch (error) {
+        if (requestID !== state.backlinksRequestID || state.noteID !== noteID) return;
+        state.backlinks = null;
+        state.backlinksError = error.message;
+        updateBacklinksCount();
+        if (elements.panel.dataset.panel === 'backlinks') renderBacklinksPanel('Não foi possível carregar os backlinks.');
+        showMessage(`Não foi possível carregar os backlinks: ${error.message}`, 'error');
+    }
+}
+
+function updateBacklinksCount() {
+    const count = state.view === 'editor' && state.noteID !== null ? state.backlinks?.length || 0 : 0;
+    elements.backlinksCount.textContent = count > 9 ? '9+' : String(count);
+    elements.backlinksCount.hidden = count === 0;
+    const label = count ? `Backlinks (${count})` : 'Abrir backlinks';
+    document.querySelector('#backlinksButton').title = label;
+    document.querySelector('#backlinksButton').setAttribute('aria-label', label);
+}
+
+function resetBacklinks() {
+    state.backlinks = null;
+    state.backlinksError = '';
+    state.backlinksRequestID++;
+    updateBacklinksCount();
+    if (elements.panel.dataset.panel === 'backlinks') renderBacklinksPanel();
+}
+
+function renderBacklinksPanel(errorMessage = '') {
+    elements.panelContent.replaceChildren();
+    if (state.view !== 'editor' || state.noteID === null) {
+        const empty = document.createElement('div');
+        empty.className = 'backlinks-panel-empty';
+        const message = document.createElement('p');
+        message.textContent = 'Abra uma nota para ver os backlinks.';
+        empty.append(message);
+        elements.panelContent.append(empty);
+        return;
+    }
+    if (state.backlinksError || errorMessage) {
+        const error = document.createElement('div');
+        error.className = 'backlinks-panel-empty';
+        const message = document.createElement('p');
+        message.textContent = errorMessage || state.backlinksError;
+        error.append(message);
+        elements.panelContent.append(error);
+        return;
+    }
+    if (state.backlinks === null) {
+        const loading = document.createElement('div');
+        loading.className = 'backlinks-panel-empty';
+        loading.textContent = 'Carregando backlinks…';
+        elements.panelContent.append(loading);
+        return;
+    }
+    if (state.backlinks.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'backlinks-panel-empty';
+        const message = document.createElement('p');
+        message.textContent = 'Nenhuma nota aponta para esta nota.';
+        empty.append(message);
+        const hint = document.createElement('small');
+        hint.textContent = 'Links [[wikilink]] e links Markdown são encontrados automaticamente.';
+        empty.append(hint);
+        elements.panelContent.append(empty);
+        return;
+    }
+    for (const note of state.backlinks) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'backlink-item';
+        item.dataset.backlinkNote = String(note.id);
+        item.title = note.folder ? `${note.folder}/${note.title}` : note.title;
+        const title = document.createElement('span');
+        title.className = 'backlink-item-title';
+        title.textContent = note.title;
+        item.append(title);
+        if (note.folder) {
+            const folder = document.createElement('span');
+            folder.className = 'backlink-item-folder';
+            folder.textContent = note.folder;
+            item.append(folder);
+        }
+        if (note.preview) {
+            const preview = document.createElement('span');
+            preview.className = 'backlink-item-preview';
+            preview.textContent = note.preview;
+            item.append(preview);
+        }
+        elements.panelContent.append(item);
+    }
+}
+
+function refreshOutline() {
+    state.outline = extractMarkdownOutline(elements.noteContent.value);
+    updateOutlineCount();
+    if (elements.panel.dataset.panel === 'outline') renderOutlinePanel();
+}
+
+function updateOutlineCount() {
+    const count = state.view === 'editor' ? state.outline.length : 0;
+    elements.outlineCount.textContent = count > 9 ? '9+' : String(count);
+    elements.outlineCount.hidden = count === 0;
+    const label = count ? `Sumário (${count})` : 'Abrir sumário da nota';
+    document.querySelector('#outlineButton').title = label;
+    document.querySelector('#outlineButton').setAttribute('aria-label', label);
+}
+
+function resetOutline() {
+    state.outline = [];
+    updateOutlineCount();
+    if (elements.panel.dataset.panel === 'outline') renderOutlinePanel();
+}
+
+function renderOutlinePanel() {
+    elements.panelContent.replaceChildren();
+    if (state.view !== 'editor') {
+        const empty = document.createElement('div');
+        empty.className = 'outline-panel-empty';
+        const message = document.createElement('p');
+        message.textContent = 'Abra uma nota para ver o sumário.';
+        empty.append(message);
+        elements.panelContent.append(empty);
+        return;
+    }
+    if (state.outline.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'outline-panel-empty';
+        const message = document.createElement('p');
+        message.textContent = 'Esta nota não tem títulos.';
+        empty.append(message);
+        elements.panelContent.append(empty);
+        return;
+    }
+    for (const heading of state.outline) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'outline-item';
+        item.dataset.outlineLine = String(heading.line);
+        item.dataset.level = String(heading.level);
+        item.style.paddingLeft = `${10 + (heading.level - 1) * 12}px`;
+        item.textContent = heading.text;
+        item.title = heading.text;
+        elements.panelContent.append(item);
+    }
+}
+
+function scrollToOutlineHeading(line) {
+    const lineIndex = Number(line);
+    const heading = state.outline.find(item => item.line === lineIndex);
+    if (!heading) return;
+    const mode = elements.editorWorkspace.dataset.editorMode;
+    if (mode !== 'edit' && renderedPreviewMarkdown !== stripFrontmatter(elements.noteContent.value)) {
+        state.pendingOutlineLine = lineIndex;
+        updatePreview();
+        return;
+    }
+    if (mode !== 'preview') {
+        const markdown = elements.noteContent.value;
+        const lines = markdown.split('\n');
+        const lineTop = measureEditorLines(markdown, [heading.line]).get(heading.line);
+        let caret = 0;
+        for (let index = 0; index < heading.line; index++) caret += lines[index].length + 1;
+        elements.noteContent.focus();
+        elements.noteContent.setSelectionRange(caret, caret);
+        requestAnimationFrame(() => {
+            if (!Number.isFinite(lineTop)) return;
+            elements.noteContent.scrollTop = Math.max(0, lineTop - elements.noteContent.clientHeight / 3);
+            handleEditorScroll(elements.noteContent);
+        });
+    }
+
+    if (mode !== 'edit') {
+        const headings = [...elements.markdownPreview.querySelectorAll('h1, h2, h3, h4, h5, h6')];
+        const headingIndex = state.outline.indexOf(heading);
+        const previewHeading = headings.find(element =>
+            Number(element.dataset.sourceLine) === heading.bodyLine
+        ) || headings[headingIndex] || headings.find(element =>
+            element.textContent.trim() === heading.text
+        );
+        if (!previewHeading) return;
+        requestAnimationFrame(() => {
+            const preview = elements.markdownPreview;
+            const targetTop = Math.max(0, Math.min(
+                preview.scrollHeight - preview.clientHeight,
+                preview.scrollTop + previewHeading.getBoundingClientRect().top - preview.getBoundingClientRect().top
+            ));
+            if (Math.abs(preview.scrollTop - targetTop) >= 1) {
+                programmaticScroll = { element: preview, scrollTop: targetTop };
+                preview.scrollTop = targetTop;
+            }
+        });
+    }
 }
 
 function renderFolderPanel() {
@@ -1611,6 +2082,16 @@ function renderDirectNotes(folder, root) {
 }
 
 function handlePanelClick(event) {
+    const outlineItem = event.target.closest('[data-outline-line]');
+    if (outlineItem) {
+        scrollToOutlineHeading(outlineItem.dataset.outlineLine);
+        return;
+    }
+    const backlink = event.target.closest('[data-backlink-note]');
+    if (backlink) {
+        void openNote(Number(backlink.dataset.backlinkNote));
+        return;
+    }
     const remove = event.target.closest('[data-delete-tree-note]');
     if (remove) {
         event.preventDefault();
@@ -1705,7 +2186,7 @@ async function moveNoteToFolder(noteID, folder) {
         if (state.view === 'editor' && state.noteID === noteID) {
             state.noteFolder = folder;
             state.savedDraft = getDraft();
-            document.querySelector('#currentFolder').textContent = folder || 'Sem pasta';
+            updateEditorBreadcrumb();
         }
         showMessage('Nota movida.', 'success');
         await refreshFolderTree();
@@ -1732,7 +2213,7 @@ async function moveFolderToParent(source, target) {
         if (state.view === 'editor' && (state.noteFolder === source || state.noteFolder.startsWith(`${source}/`))) {
             state.noteFolder = rebaseFolderPath(state.noteFolder, source, result.folder);
             state.savedDraft = getDraft();
-            document.querySelector('#currentFolder').textContent = state.noteFolder || 'Sem pasta';
+            updateEditorBreadcrumb();
             const current = history.state || {};
             history.replaceState({ ...current, list: state.listState }, '', location.href);
         }
@@ -1765,6 +2246,9 @@ async function selectFolder(folder) {
         history.pushState({ view: 'list', list: { ...captureListState(), folder, offset: 0 } }, '', location.pathname);
         state.view = 'list';
         state.noteID = null;
+        resetBacklinks();
+        resetOutline();
+        document.body.classList.remove('is-editor-view');
         elements.editorView.hidden = true;
         elements.searchView.hidden = false;
         elements.newNote.hidden = false;

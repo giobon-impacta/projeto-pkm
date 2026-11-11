@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mapEditorToPreview, mapPreviewToEditor } from './scroll-sync.js';
+import { getScrollSpacerHeight, mapEditorToPreview, mapPreviewToEditor } from './scroll-sync.js';
+
+test('adds preview scroll space when rendered content is shorter than the source', () => {
+    assert.equal(getScrollSpacerHeight(300, 200, 600), 700);
+    assert.equal(getScrollSpacerHeight(300, 800, 600), 100);
+    assert.equal(getScrollSpacerHeight(300, 900, 600), 0);
+    assert.equal(getScrollSpacerHeight(0, 200, 600), 0);
+});
 
 test('scroll mapping uses proportional progress when the document has no landmarks', () => {
     assert.equal(mapEditorToPreview(250, 1000, 500), 125);

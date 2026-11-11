@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ensureFrontmatterTags, highlightMarkdown, indentSelection, MarkdownEditor, stripFrontmatter } from './markdown-editor.js';
+import { ensureFrontmatterTags, extractMarkdownOutline, highlightMarkdown, indentSelection, MarkdownEditor, parseFrontmatter, stripFrontmatter } from './markdown-editor.js';
 
 function createTextarea(value, start = 0, end = start) {
     return {
@@ -123,6 +123,29 @@ test('preserves existing frontmatter tags', () => {
 
 test('omits metadata frontmatter from the rendered Markdown body', () => {
     assert.equal(stripFrontmatter('---\ntags: pkm\n---\n\n# Note'), '# Note');
+});
+
+test('parses scalar and list frontmatter properties for the collapsible preview', () => {
+    assert.deepEqual(parseFrontmatter('---\ntitle: "Example"\ntags:\n  - notes\n  - pkm\nstatus: true\npriority: 2\n---\nBody'), {
+        title: 'Example',
+        tags: ['notes', 'pkm'],
+        status: true,
+        priority: 2
+    });
+});
+
+test('does not expose malformed or absent frontmatter as properties', () => {
+    assert.equal(parseFrontmatter('# Note\n---\ntags: pkm'), null);
+    assert.equal(parseFrontmatter('---\ntags: pkm\n# Note'), null);
+    assert.equal(parseFrontmatter('---\n---\n# Note'), null);
+});
+
+test('extracts nested headings, skips frontmatter and fenced code, and tracks preview lines', () => {
+    assert.deepEqual(extractMarkdownOutline('---\ntags: pkm\n---\n\n# First\n\n## Second\n\n```md\n# Not a heading\n```\n\nThird\n---'), [
+        { level: 1, text: 'First', line: 4, bodyLine: 0 },
+        { level: 2, text: 'Second', line: 6, bodyLine: 2 },
+        { level: 2, text: 'Third', line: 12, bodyLine: 8 }
+    ]);
 });
 
 test('highlights wikilinks in the Markdown editor', () => {

@@ -14,6 +14,14 @@
         <button class="rail-button is-active" type="button" data-panel="files" aria-label="Abrir pastas" title="Pastas">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h6l2 2h9v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M3.5 8.5v-2a2 2 0 0 1 2-2h3l2 2"/></svg>
         </button>
+        <button class="rail-button backlinks-rail-button" id="backlinksButton" type="button" data-panel="backlinks" aria-label="Abrir backlinks" title="Backlinks">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13.5a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.7 1.7"/><path d="M14 10.5a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 19.2l1.7-1.7"/></svg>
+            <span class="backlinks-count" id="backlinksCount" hidden></span>
+        </button>
+        <button class="rail-button" id="outlineButton" type="button" data-panel="outline" aria-label="Abrir sumário da nota" title="Sumário">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>
+            <span class="backlinks-count" id="outlineCount" hidden></span>
+        </button>
         <button class="rail-button" id="graphButton" type="button" aria-label="Abrir grafo de notas" title="Grafo de notas" aria-pressed="false">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="7" r="2.2"/><circle cx="10" cy="18" r="2.2"/><path d="m8 6.3 7.8.4M7.3 8l2 7.8m7.2-6.7-5 7"/></svg>
         </button>
@@ -30,6 +38,7 @@
         </header>
         <div id="panelContent" class="panel-content"></div>
     </aside>
+    <div class="workspace-panel-resizer" id="workspacePanelResizer" role="separator" aria-label="Redimensionar barra lateral" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="640" aria-valuenow="280" aria-controls="workspacePanel" tabindex="0"></div>
 
     <main class="main-content">
         <header class="topbar">
@@ -37,10 +46,18 @@
                 <span class="brand-dot" aria-hidden="true"></span>
                 <h1>PKM Notes</h1>
                 <span class="breadcrumb" id="currentFolder">Todas as notas</span>
+                <span class="editor-breadcrumb-separator" aria-hidden="true">/</span>
+                <label class="sr-only" for="noteTitle">Título da nota</label>
+                <input id="noteTitle" class="title-field" name="title" maxlength="256" placeholder="Título da nota" autocomplete="off">
             </div>
             <div class="topbar-actions">
                 <button class="button button-muted" id="logoutButton" type="button" hidden>Sair</button>
                 <button class="button button-primary" id="newNote" type="button"><span aria-hidden="true">＋</span> Nova nota</button>
+                <div class="topbar-editor-actions">
+                    <span id="saveStatus" class="save-status" aria-live="polite"></span>
+                    <button class="icon-button" id="attachmentsButton" type="button" aria-label="Abrir anexos" title="Anexos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12.5 7.1-7.1a3 3 0 0 1 4.2 4.2l-9.2 9.2a5 5 0 0 1-7.1-7.1l9.2-9.2"/></svg></button>
+                    <button class="icon-button danger-hover" id="deleteCurrentNote" type="button" aria-label="Excluir nota" title="Excluir nota" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg></button>
+                </div>
             </div>
         </header>
 
@@ -98,22 +115,6 @@
         </section>
 
         <section id="editorView" class="editor-view" aria-label="Editor de nota" hidden>
-            <header class="editor-header">
-                <label class="sr-only" for="noteTitle">Título da nota</label>
-                <input id="noteTitle" class="title-field" name="title" maxlength="256" placeholder="Título da nota" autocomplete="off">
-                <div class="editor-header-actions">
-                    <span id="saveStatus" class="save-status" aria-live="polite"></span>
-                    <button class="icon-button danger-hover" id="deleteCurrentNote" type="button" aria-label="Excluir nota" title="Excluir nota" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg></button>
-                </div>
-            </header>
-            <section id="attachmentsPanel" class="attachments-panel" aria-label="Anexos da nota" hidden>
-                <div class="attachments-heading">
-                    <span class="pane-label">Anexos</span>
-                    <button class="text-button" id="addAttachment" type="button">Adicionar arquivo</button>
-                    <input id="attachmentInput" type="file" multiple hidden>
-                </div>
-                <ul id="attachmentList" class="attachment-list"></ul>
-            </section>
             <div class="editor-toolbar">
                 <div class="markdown-tools" role="toolbar" aria-label="Formatação Markdown">
                     <button type="button" data-action="undo" aria-label="Desfazer" title="Desfazer (Ctrl+Z)" disabled>↶</button>
@@ -135,7 +136,6 @@
                     <button type="button" data-format="table" aria-label="Tabela" title="Tabela (Ctrl+Alt+T)">▦</button>
                 </div>
                 <div class="editor-toolbar-right">
-                    <button class="text-button save-now" id="saveNow" type="button">Salvar agora</button>
                     <div class="editor-modes" role="group" aria-label="Modo do editor">
                         <button type="button" class="editor-mode" data-editor-mode="edit" aria-pressed="false">Edição</button>
                         <button type="button" class="editor-mode is-active" data-editor-mode="split" aria-pressed="true">Dividido</button>
@@ -145,19 +145,28 @@
             </div>
             <div class="editor-workspace" data-editor-mode="split">
                 <section class="editor-pane edit-pane" aria-label="Edição Markdown">
-                    <span class="pane-label">Markdown</span>
                     <div class="source-editor">
-                        <pre class="source-highlight" id="sourceHighlight" aria-hidden="true"></pre>
                         <textarea id="noteContent" name="content" spellcheck="false" aria-label="Conteúdo Markdown" aria-autocomplete="list" aria-controls="wikilinkAutocomplete" aria-expanded="false" placeholder="# Comece a escrever..."></textarea>
                     </div>
                 </section>
                 <div class="editor-splitter" role="separator" aria-label="Redimensionar editor e pré-visualização" aria-orientation="vertical" aria-valuemin="20" aria-valuemax="80" aria-valuenow="50" tabindex="0"></div>
                 <section class="editor-pane preview-pane" aria-label="Pré-visualização">
-                    <span class="pane-label">Pré-visualização</span>
                     <article id="markdownPreview" class="markdown-preview"></article>
                 </section>
             </div>
         </section>
+        <dialog id="attachmentsDialog" class="attachments-dialog" aria-labelledby="attachmentsTitle">
+            <header class="attachments-dialog-header">
+                <h2 id="attachmentsTitle">Anexos</h2>
+                <button class="icon-button" id="closeAttachments" type="button" aria-label="Fechar anexos">×</button>
+            </header>
+            <ul id="attachmentList" class="attachment-list"></ul>
+            <p id="attachmentsEmpty" class="attachments-empty">Nenhum anexo nesta nota.</p>
+            <div class="attachments-dialog-actions">
+                <button class="button button-primary" id="addAttachment" type="button">Enviar arquivos</button>
+                <input id="attachmentInput" type="file" multiple hidden>
+            </div>
+        </dialog>
         <div id="wikilinkAutocomplete" class="wikilink-autocomplete" role="listbox" aria-label="Notas para link" hidden></div>
         <div id="appMessage" class="app-message" role="status" aria-live="polite"></div>
     </main>
