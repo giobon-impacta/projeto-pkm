@@ -461,18 +461,23 @@ func (a *App) UpdateNote(id int64, note Note) error {
 		return err
 	}
 	defer tx.Rollback()
-	var oldTitle string
-	if err := tx.QueryRow("SELECT title FROM notes WHERE rowid = ?", id).Scan(&oldTitle); err != nil {
+	var oldTitle, oldFolder string
+	if err := tx.QueryRow("SELECT title, COALESCE(folder, '') FROM notes WHERE rowid = ?", id).
+		Scan(&oldTitle, &oldFolder); err != nil {
 		return err
 	}
 	titleChanged := oldTitle != note.Title
+	folderChanged := oldFolder != note.Folder
+	var before []indexedNote
 	var byPath, byTitle map[string]int64
-	if titleChanged {
-		notes, err := readNotesForLinksWith(tx)
+	if titleChanged || folderChanged {
+		before, err = readNotesForLinksWith(tx)
 		if err != nil {
 			return err
 		}
-		byPath, byTitle = makeNoteLinkIndexes(notes)
+		if titleChanged && !folderChanged {
+			byPath, byTitle = makeNoteLinkIndexes(before)
+		}
 	}
 	result, err := tx.Exec(`UPDATE notes SET title = ?, content = ?, folder = ?, tags = ?,
 		updated_at = datetime('now') WHERE rowid = ?`,
@@ -487,7 +492,15 @@ func (a *App) UpdateNote(id int64, note Note) error {
 	if count == 0 {
 		return sql.ErrNoRows
 	}
-	if titleChanged {
+	if folderChanged {
+		after, err := readNotesForLinksWith(tx)
+		if err != nil {
+			return err
+		}
+		if err := relinkNotesAfterMove(tx, before, after, id); err != nil {
+			return err
+		}
+	} else if titleChanged {
 		if err := rewriteIncomingLinks(tx, id, note.Title, byPath, byTitle); err != nil {
 			return err
 		}
@@ -527,7 +540,7 @@ func (a *App) MoveNoteFolder(id int64, folder string) error {
 	if err != nil {
 		return err
 	}
-	if err := relinkNotesAfterMove(tx, before, after); err != nil {
+	if err := relinkNotesAfterMove(tx, before, after, 0); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -596,7 +609,7 @@ func (a *App) MoveFolder(source, target string) (string, int64, error) {
 	if err != nil {
 		return "", 0, err
 	}
-	if err := relinkNotesAfterMove(tx, before, after); err != nil {
+	if err := relinkNotesAfterMove(tx, before, after, 0); err != nil {
 		return "", 0, err
 	}
 	if err := tx.Commit(); err != nil {

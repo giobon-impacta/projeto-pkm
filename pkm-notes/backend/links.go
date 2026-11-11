@@ -612,7 +612,7 @@ func escapeLinkDestination(value string) string {
 // relinkNotesAfterMove keeps the meaning of path-based links across folder
 // moves. It compares the resolution before and after the move and rewrites
 // only the targets that would otherwise resolve to another note or nothing.
-func relinkNotesAfterMove(tx *sql.Tx, before, after []indexedNote) error {
+func relinkNotesAfterMove(tx *sql.Tx, before, after []indexedNote, skipSourceID int64) error {
 	oldByPath, oldByTitle := makeNoteLinkIndexes(before)
 	newByPath, newByTitle := makeNoteLinkIndexes(after)
 	oldNotes := make(map[int64]indexedNote, len(before))
@@ -636,6 +636,9 @@ func relinkNotesAfterMove(tx *sql.Tx, before, after []indexedNote) error {
 			rows.Close()
 			return err
 		}
+		if sourceID == skipSourceID {
+			continue
+		}
 		oldSource, exists := oldNotes[sourceID]
 		if !exists {
 			continue
@@ -653,7 +656,10 @@ func relinkNotesAfterMove(tx *sql.Tx, before, after []indexedNote) error {
 			continue
 		}
 		if pathStyleTarget(targetKey) {
-			if oldSource.Folder != newSource.Folder || oldNotes[oldTargetID].Folder != newTarget.Folder {
+			oldTarget := oldNotes[oldTargetID]
+			if oldSource.Folder != newSource.Folder ||
+				oldTarget.Folder != newTarget.Folder ||
+				oldTarget.Title != newTarget.Title {
 				affected[sourceID] = struct{}{}
 			}
 			continue
@@ -736,7 +742,8 @@ func rewriteWikilinksInTextForMove(value string, oldSource, newSource indexedNot
 		if oldTargetID == 0 || !needsRelink {
 			continue
 		}
-		replacement := movedLinkTarget(rawTarget, newSource, newTarget, false)
+		replacement := movedLinkTarget(rawTarget, newSource, newTarget, oldTargetID,
+			newByPath, newByTitle, false)
 		if replacement == rawTarget {
 			continue
 		}
@@ -773,7 +780,8 @@ func rewriteMarkdownLinksInTextForMove(value string, oldSource, newSource indexe
 		if oldTargetID == 0 || !needsRelink {
 			continue
 		}
-		replacement := movedLinkTarget(destination, newSource, newTarget, !angleBracketed)
+		replacement := movedLinkTarget(destination, newSource, newTarget, oldTargetID,
+			newByPath, newByTitle, !angleBracketed)
 		if angleBracketed {
 			replacement = "<" + replacement + ">"
 		}
@@ -809,7 +817,8 @@ func rewriteLinkDefinitionLineForMove(line string, oldSource, newSource indexedN
 	if oldTargetID == 0 || !needsRelink {
 		return line, false
 	}
-	replacement := movedLinkTarget(destination, newSource, newTarget, !angleBracketed)
+	replacement := movedLinkTarget(destination, newSource, newTarget, oldTargetID,
+		newByPath, newByTitle, !angleBracketed)
 	if angleBracketed {
 		replacement = "<" + replacement + ">"
 	}
@@ -837,7 +846,9 @@ func linkMoveInfo(target string, oldSource, newSource indexedNote, oldTargetID i
 		return indexedNote{}, false
 	}
 	if pathStyleTarget(target) {
-		if oldSource.Folder == newSource.Folder && oldTarget.Folder == newTarget.Folder {
+		if oldSource.Folder == newSource.Folder &&
+			oldTarget.Folder == newTarget.Folder &&
+			oldTarget.Title == newTarget.Title {
 			return indexedNote{}, false
 		}
 		return newTarget, true
@@ -859,7 +870,7 @@ func pathStyleTarget(target string) bool {
 // movedLinkTarget builds a target that still points to newTarget from the new
 // location of the source note, preserving the original shape (title-only,
 // relative or absolute path, .md extension, fragment and query string).
-func movedLinkTarget(raw string, newSource, newTarget indexedNote, escape bool) string {
+func movedLinkTarget(raw string, newSource, newTarget indexedNote, oldTargetID int64, newByPath, newByTitle map[string]int64, escape bool) string {
 	leading := raw[:len(raw)-len(strings.TrimLeft(raw, " "))]
 	trailing := raw[len(strings.TrimRight(raw, " ")):]
 	target := strings.TrimSpace(raw)
@@ -875,20 +886,26 @@ func movedLinkTarget(raw string, newSource, newTarget indexedNote, escape bool) 
 		target = target[:len(target)-3]
 	}
 
-	fullPath := path.Join(newTarget.Folder, newTarget.Title)
-	absolute := strings.HasPrefix(target, "/")
-	relativePrefix := strings.HasPrefix(target, "./")
 	var destination string
-	if absolute {
-		destination = "/" + fullPath
-	} else {
-		destination = relativeNotePath(newSource.Folder, fullPath)
-		if relativePrefix {
-			destination = "./" + destination
+	if !pathStyleTarget(target) &&
+		resolveNoteLink(newSource, newTarget.Title, newByPath, newByTitle) == oldTargetID {
+		destination = newTarget.Title
+		if escape {
+			destination = escapeLinkDestination(destination)
 		}
-	}
-	if escape {
-		destination = escapeLinkPath(destination)
+	} else {
+		fullPath := path.Join(newTarget.Folder, newTarget.Title)
+		if strings.HasPrefix(target, "/") {
+			destination = "/" + fullPath
+		} else {
+			destination = relativeNotePath(newSource.Folder, fullPath)
+			if strings.HasPrefix(target, "./") {
+				destination = "./" + destination
+			}
+		}
+		if escape {
+			destination = escapeLinkPath(destination)
+		}
 	}
 	return leading + destination + extension + suffix + trailing
 }

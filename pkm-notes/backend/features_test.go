@@ -745,6 +745,66 @@ func TestMovingFolderTreeRebasesLinks(t *testing.T) {
 	}
 }
 
+func TestUpdatingNoteFolderRebasesIncomingLinks(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	targetID, err := app.CreateNote(Note{Title: "Moved", Folder: "Notes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceID, err := app.CreateNote(Note{
+		Title:  "Source",
+		Folder: "Root",
+		Content: strings.Join([]string{
+			"[[Moved]]",
+			"[moved](Notes/Moved.md)",
+			"[[/Notes/Moved|alias]]",
+		}, "\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A PUT that renames and moves the note in one request must rewrite the
+	// incoming links using both the new title and the new folder.
+	if err := app.UpdateNote(targetID, Note{Title: "Renamed", Folder: "Archive"}); err != nil {
+		t.Fatal(err)
+	}
+	source, err := app.GetNote(sourceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Join([]string{
+		"[[Renamed]]",
+		"[moved](../Archive/Renamed.md)",
+		"[[/Archive/Renamed|alias]]",
+	}, "\n")
+	if source.Content != want {
+		t.Fatalf("unexpected relinked content:\n got: %q\nwant: %q", source.Content, want)
+	}
+
+	graph, err := app.NoteGraph()
+	if err != nil {
+		t.Fatal(err)
+	}
+	edges := make(map[[2]int64]map[string]bool)
+	for _, edge := range graph.Edges {
+		key := [2]int64{edge.Source, edge.Target}
+		if edges[key] == nil {
+			edges[key] = make(map[string]bool)
+		}
+		edges[key][edge.Type] = true
+	}
+	if !edges[[2]int64{sourceID, targetID}]["wikilink"] ||
+		!edges[[2]int64{sourceID, targetID}]["markdown"] {
+		t.Fatalf("unexpected edges after update: %#v", graph.Edges)
+	}
+}
+
 func TestMigrationBackfillsPersistedLinksIdempotently(t *testing.T) {
 	dataDir := t.TempDir()
 	db, err := sql.Open("sqlite3", filepath.Join(dataDir, "notes.db"))
