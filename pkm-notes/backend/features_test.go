@@ -1,9 +1,11 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -805,6 +807,483 @@ func TestUpdatingNoteFolderRebasesIncomingLinks(t *testing.T) {
 	}
 }
 
+func TestTagFilteringAndTagList(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	creates := []Note{
+		{Title: "Go basics", Tags: []string{"go", "backend"}},
+		{Title: "Go patterns", Tags: []string{"Go", "work"}},
+		{Title: "Workshop", Tags: []string{"workshop"}},
+		{Title: "Misc", Tags: []string{"backend"}},
+	}
+	for _, note := range creates {
+		if _, err := app.CreateNote(note); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	page, err := app.ListNotes("", "go", 30, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 2 || len(page.Items) != 2 {
+		t.Fatalf("tag filter is not exact and case-insensitive: %#v", page)
+	}
+	page, err = app.ListNotes("", "workshop", 30, 0)
+	if err != nil || page.Total != 1 || page.Items[0].Title != "Workshop" {
+		t.Fatalf("tag filter matched a partial tag: %#v err=%v", page, err)
+	}
+	results, err := app.SearchNotes("go", "title", "", "backend", 30, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results.Total != 1 || results.Items[0].Title != "Go basics" {
+		t.Fatalf("search did not combine query and tag: %#v", results)
+	}
+
+	tags, err := app.Tags()
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := make(map[string]int, len(tags))
+	for _, tag := range tags {
+		counts[strings.ToLower(tag.Name)] = tag.Count
+	}
+	if len(tags) != 4 || counts["go"] != 2 || counts["backend"] != 2 ||
+		counts["work"] != 1 || counts["workshop"] != 1 {
+		t.Fatalf("unexpected tag counts: %#v", tags)
+	}
+	if tags[0].Count != 2 || tags[len(tags)-1].Count != 1 {
+		t.Fatalf("tags are not sorted by count: %#v", tags)
+	}
+
+	handler := app.Handler(filepath.Join("..", "web", "frontend"))
+	request := httptest.NewRequest(http.MethodGet, "/api/tags", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("tags endpoint status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var payload []TagCount
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload) != 4 || payload[0].Count != 2 {
+		t.Fatalf("unexpected tags payload: %#v", payload)
+	}
+
+	page, err = app.ListNotes("", "does-not-exist", 30, 0)
+	if err != nil || page.Total != 0 || len(page.Items) != 0 {
+		t.Fatalf("unknown tag should return an empty page: %#v err=%v", page, err)
+	}
+}
+
+func TestBackupRoundTripRestoresNotesAndAttachments(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	targetID, err := app.CreateNote(Note{Title: "Target", Folder: "Notes", Tags: []string{"go", "Backup"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceID, err := app.CreateNote(Note{
+		Title: "Source", Folder: "Notes", Content: "[[Target]]", Tags: []string{"kb"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attachment, err := app.SaveAttachment(targetID, strings.NewReader("attachment bytes"), "hello.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var attachmentStorageName string
+	if err := app.db.QueryRow("SELECT storage_name FROM attachments WHERE id = ?", attachment.ID).
+		Scan(&attachmentStorageName); err != nil {
+		t.Fatal(err)
+	}
+	target, err := app.GetNote(targetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target.Content = "See " + attachment.URL
+	if err := app.UpdateNote(targetID, Note{
+		Title: target.Title, Content: target.Content, Folder: target.Folder,
+		Tags: target.Tags, Version: target.Version,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	target, err = app.GetNote(targetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var archive bytes.Buffer
+	if err := app.ExportBackup(&archive); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := zip.NewReader(bytes.NewReader(archive.Bytes()), int64(archive.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := make(map[string]bool, len(reader.File))
+	for _, file := range reader.File {
+		entries[file.Name] = true
+	}
+	if !entries["manifest.json"] || !entries[backupAttachmentPath(targetID, attachmentStorageName)] {
+		t.Fatalf("backup is missing expected entries: %#v", entries)
+	}
+
+	// Restoring into an existing library must replace everything, including
+	// attachment files, without changing note or attachment IDs.
+	staleID, err := app.CreateNote(Note{Title: "Stale"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	staleAttachment, err := app.SaveAttachment(staleID, strings.NewReader("stale"), "stale.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, stalePath, err := app.GetAttachment(staleID, staleAttachment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	notes, attachments, err := app.RestoreBackup(archive.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if notes != 2 || attachments != 1 {
+		t.Fatalf("unexpected restore counts: notes=%d attachments=%d", notes, attachments)
+	}
+	page, err := app.ListNotes("", "", 100, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 2 {
+		t.Fatalf("restore kept stale notes: %#v", page)
+	}
+	restored, err := app.GetNote(targetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.Content != target.Content || restored.Folder != "Notes" ||
+		len(restored.Tags) != 2 || restored.Version != target.Version {
+		t.Fatalf("restored note differs from the export: %#v", restored)
+	}
+	versions, err := app.ListNoteVersions(targetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 1 || versions[0].Version != 1 {
+		t.Fatalf("restore did not preserve the note history: %#v", versions)
+	}
+	if _, err := app.GetNote(staleID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("stale note survived the restore: %v", err)
+	}
+	if _, err := os.Stat(stalePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stale attachment file survived the restore: %v", err)
+	}
+	restoredAttachment, restoredPath, err := app.GetAttachment(targetID, attachment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restoredAttachment.Filename != "hello.txt" || restoredAttachment.Size != int64(len("attachment bytes")) {
+		t.Fatalf("unexpected restored attachment: %#v", restoredAttachment)
+	}
+	content, err := os.ReadFile(restoredPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "attachment bytes" {
+		t.Fatalf("restored attachment content = %q", content)
+	}
+	if _, err := os.Stat(app.attachmentsDir + ".previous"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("restore left the previous attachment directory behind: %v", err)
+	}
+
+	graph, err := app.NoteGraph()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, edge := range graph.Edges {
+		if edge.Source == sourceID && edge.Target == targetID && edge.Type == "wikilink" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("restore did not rebuild note links: %#v", graph.Edges)
+	}
+
+	// A malformed archive must not touch the current library.
+	if _, _, err := app.RestoreBackup([]byte("not a zip")); !errors.Is(err, errInvalidBackup) {
+		t.Fatalf("malformed archive error = %v, want errInvalidBackup", err)
+	}
+	if _, err := app.GetNote(targetID); err != nil {
+		t.Fatalf("malformed restore damaged the library: %v", err)
+	}
+
+	// The HTTP endpoint must serve a downloadable archive and accept it back.
+	handler := app.Handler(filepath.Join("..", "web", "frontend"))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/backup", nil))
+	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "application/zip" {
+		t.Fatalf("backup download status=%d type=%q", response.Code, response.Header().Get("Content-Type"))
+	}
+	if _, err := zip.NewReader(bytes.NewReader(response.Body.Bytes()), int64(response.Body.Len())); err != nil {
+		t.Fatalf("download is not a zip archive: %v", err)
+	}
+
+	response = httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/backup", bytes.NewReader(archive.Bytes()))
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("restore endpoint status=%d body=%s", response.Code, response.Body.String())
+	}
+	var payload map[string]int
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["notes"] != 2 || payload["attachments"] != 1 {
+		t.Fatalf("unexpected restore response: %#v", payload)
+	}
+}
+
+func TestBackupRejectsUnsafeAttachmentPaths(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	if _, err := app.CreateNote(Note{Title: "Keep"}); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest := backupManifest{
+		Format: backupFormat, Version: backupVersion,
+		Notes: []backupNote{{ID: 1, Title: "Evil", Version: 1}},
+		Attachments: []backupAttachment{{
+			ID: 1, NoteID: 1, Filename: "evil.txt", StorageName: "../escape",
+			MediaType: "text/plain", Size: 1,
+		}},
+	}
+	var archive bytes.Buffer
+	writer := zip.NewWriter(&archive)
+	entry, err := writer.CreateHeader(&zip.FileHeader{Name: "manifest.json", Method: zip.Deflate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.NewEncoder(entry).Encode(manifest); err != nil {
+		t.Fatal(err)
+	}
+	file, err := writer.Create("attachments/1/escape")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write([]byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := app.RestoreBackup(archive.Bytes()); !errors.Is(err, errInvalidBackup) {
+		t.Fatalf("unsafe storage name error = %v, want errInvalidBackup", err)
+	}
+	if page, err := app.ListNotes("", "", 10, 0); err != nil || page.Total != 1 ||
+		page.Items[0].Title != "Keep" {
+		t.Fatalf("unsafe restore damaged the library: %#v err=%v", page, err)
+	}
+}
+
+func TestNoteHistorySnapshotsAndRestoresVersions(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	id, err := app.CreateNote(Note{Title: "History", Content: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, content := range []string{"second", "third"} {
+		note, err := app.GetNote(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		note.Content = content
+		if err := app.UpdateNote(id, note); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	versions, err := app.ListNoteVersions(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 2 {
+		t.Fatalf("expected two snapshots, got %#v", versions)
+	}
+	if versions[0].Version != 2 || versions[1].Version != 1 {
+		t.Fatalf("snapshots are not newest first: %#v", versions)
+	}
+	first, err := app.GetNoteVersion(id, versions[1].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Content != "first" || first.Title != "History" {
+		t.Fatalf("unexpected snapshot content: %#v", first)
+	}
+
+	current, err := app.GetNote(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, staleErr := app.RestoreNoteVersion(id, versions[1].ID, current.Version-1)
+	if !errors.Is(staleErr, ErrVersionConflict) {
+		t.Fatalf("stale restore error = %v, want ErrVersionConflict", staleErr)
+	}
+
+	restored, err := app.RestoreNoteVersion(id, versions[1].ID, current.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.Content != "first" || restored.Version != current.Version+1 {
+		t.Fatalf("unexpected restored note: %#v", restored)
+	}
+	versions, err = app.ListNoteVersions(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 3 || versions[0].Version != current.Version {
+		t.Fatalf("restore did not snapshot the previous state: %#v", versions)
+	}
+
+	// Old snapshots are pruned so a note edited for a long time does not grow
+	// the database without bound.
+	for index := 0; index < noteVersionLimit+5; index++ {
+		note, err := app.GetNote(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		note.Content = fmt.Sprintf("edit %d", index)
+		if err := app.UpdateNote(id, note); err != nil {
+			t.Fatal(err)
+		}
+	}
+	versions, err = app.ListNoteVersions(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != noteVersionLimit {
+		t.Fatalf("history kept %d versions, want %d", len(versions), noteVersionLimit)
+	}
+
+	handler := app.Handler(filepath.Join("..", "web", "frontend"))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet,
+		fmt.Sprintf("/api/notes/%d/versions", id), nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("history endpoint status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var payload []NoteVersion
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload) != noteVersionLimit {
+		t.Fatalf("history endpoint returned %d versions", len(payload))
+	}
+
+	response = httptest.NewRecorder()
+	current, err = app.GetNote(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost,
+		fmt.Sprintf("/api/notes/%d/versions/%d/restore", id, payload[0].ID),
+		strings.NewReader(fmt.Sprintf(`{"version":%d}`, current.Version)))
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("restore endpoint status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var note Note
+	if err := json.Unmarshal(response.Body.Bytes(), &note); err != nil {
+		t.Fatal(err)
+	}
+	if note.ID != id || note.Content == "" {
+		t.Fatalf("unexpected restored payload: %#v", note)
+	}
+}
+
+func TestOptimisticConcurrencyRejectsStaleUpdates(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	id, err := app.CreateNote(Note{Title: "Concurrent", Content: "v1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := app.GetNote(id)
+	if err != nil || first.Version != 1 {
+		t.Fatalf("initial version: %#v err=%v", first, err)
+	}
+	if err := app.UpdateNote(id, Note{
+		Title: "Concurrent", Content: "v2", Version: first.Version,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	second, err := app.GetNote(id)
+	if err != nil || second.Version != first.Version+1 || second.Content != "v2" {
+		t.Fatalf("updated version: %#v err=%v", second, err)
+	}
+
+	err = app.UpdateNote(id, Note{
+		Title: "Concurrent", Content: "stale", Version: first.Version,
+	})
+	if !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("stale update error = %v, want ErrVersionConflict", err)
+	}
+	if current, err := app.GetNote(id); err != nil || current.Content != "v2" {
+		t.Fatalf("stale update changed the note: %#v err=%v", current, err)
+	}
+
+	// Internal callers that do not provide a version keep the unconditional
+	// behaviour used by migrations and tests.
+	if err := app.UpdateNote(id, Note{Title: "Concurrent", Content: "forced"}); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := app.Handler(filepath.Join("..", "web", "frontend"))
+	request := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/notes/%d", id),
+		strings.NewReader(`{"title":"Concurrent","content":"conflict","version":1}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("conflict status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Note  Note   `json:"note"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Error == "" || payload.Note.Content != "forced" || payload.Note.Version != 3 {
+		t.Fatalf("unexpected conflict payload: %#v", payload)
+	}
+}
+
 func TestMigrationBackfillsPersistedLinksIdempotently(t *testing.T) {
 	dataDir := t.TempDir()
 	db, err := sql.Open("sqlite3", filepath.Join(dataDir, "notes.db"))
@@ -854,9 +1333,9 @@ func TestMigrationBackfillsPersistedLinksIdempotently(t *testing.T) {
 			app.Close()
 			t.Fatal(err)
 		}
-		if version != 2 {
+		if version != 4 {
 			app.Close()
-			t.Fatalf("schema version = %d, want 2", version)
+			t.Fatalf("schema version = %d, want 4", version)
 		}
 		if err := app.Close(); err != nil {
 			t.Fatal(err)

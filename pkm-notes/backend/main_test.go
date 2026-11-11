@@ -44,7 +44,7 @@ func TestLegacyMigrationSearchAndCRUD(t *testing.T) {
 	}
 	defer app.Close()
 
-	titleResults, err := app.SearchNotes("ori", "title", "", 30, 0)
+	titleResults, err := app.SearchNotes("ori", "title", "", "", 30, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestLegacyMigrationSearchAndCRUD(t *testing.T) {
 		t.Fatalf("tags were not preserved: %#v", titleResults.Items[0].Tags)
 	}
 
-	contentResults, err := app.SearchNotes("orch", "content", "Legacy/Notes", 30, 0)
+	contentResults, err := app.SearchNotes("orch", "content", "Legacy/Notes", "", 30, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,14 +71,14 @@ func TestLegacyMigrationSearchAndCRUD(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	oldContent, err := app.SearchNotes("orchid", "content", "", 30, 0)
+	oldContent, err := app.SearchNotes("orchid", "content", "", "", 30, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if oldContent.Total != 0 {
 		t.Fatalf("old content remains searchable after update: %#v", oldContent)
 	}
-	newContent, err := app.SearchNotes("fresh", "content", "", 30, 0)
+	newContent, err := app.SearchNotes("fresh", "content", "", "", 30, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestLegacyMigrationSearchAndCRUD(t *testing.T) {
 		len(folders[0].Children) != 1 || folders[0].Children[0].Path != "Legacy/Ideas" {
 		t.Fatalf("unexpected virtual folder tree: %#v", folders)
 	}
-	page, err := app.ListNotes("Legacy/Ideas", 10, 0)
+	page, err := app.ListNotes("Legacy/Ideas", "", 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestLegacyMigrationSearchAndCRUD(t *testing.T) {
 	if err := app.DeleteNote(id); err != nil {
 		t.Fatal(err)
 	}
-	deleted, err := app.SearchNotes("quartz", "content", "", 30, 0)
+	deleted, err := app.SearchNotes("quartz", "content", "", "", 30, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestLargeCollectionSearchAndPagination(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	page, err := app.ListNotes("", 25, 0)
+	page, err := app.ListNotes("", "", 25, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +264,7 @@ func TestLargeCollectionSearchAndPagination(t *testing.T) {
 		t.Fatalf("large collection was not paginated: total=%d items=%d limit=%d", page.Total, len(page.Items), page.Limit)
 	}
 
-	results, err := app.SearchNotes("needle", "content", "", 25, 0)
+	results, err := app.SearchNotes("needle", "content", "", "", 25, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

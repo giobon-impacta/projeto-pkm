@@ -51,10 +51,14 @@
                 <input id="noteTitle" class="title-field" name="title" maxlength="256" placeholder="Título da nota" autocomplete="off">
             </div>
             <div class="topbar-actions">
+                <button class="button button-muted" id="exportBackup" type="button" title="Baixar um backup completo em .zip">Exportar</button>
+                <button class="button button-muted" id="importBackup" type="button" title="Restaurar um backup .zip substituindo os dados atuais">Importar</button>
+                <input id="backupInput" type="file" accept=".zip,application/zip" hidden>
                 <button class="button button-muted" id="logoutButton" type="button" hidden>Sair</button>
                 <button class="button button-primary" id="newNote" type="button"><span aria-hidden="true">＋</span> Nova nota</button>
                 <div class="topbar-editor-actions">
                     <span id="saveStatus" class="save-status" aria-live="polite"></span>
+                    <button class="icon-button" id="historyButton" type="button" aria-label="Abrir histórico da nota" title="Histórico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></button>
                     <button class="icon-button" id="attachmentsButton" type="button" aria-label="Abrir anexos" title="Anexos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12.5 7.1-7.1a3 3 0 0 1 4.2 4.2l-9.2 9.2a5 5 0 0 1-7.1-7.1l9.2-9.2"/></svg></button>
                     <button class="icon-button danger-hover" id="deleteCurrentNote" type="button" aria-label="Excluir nota" title="Excluir nota" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg></button>
                 </div>
@@ -75,11 +79,13 @@
                     </div>
                     <div class="result-count" id="resultCount" aria-live="polite"></div>
                 </div>
+                <div class="tag-filter-bar" id="tagFilterBar" aria-label="Filtrar por tag" hidden></div>
             </section>
 
             <section class="results-section" aria-label="Resultados">
                 <div class="results-heading">
                     <h2 id="resultsTitle">Todas as notas</h2>
+                    <button class="text-button" id="clearTag" type="button" hidden>Limpar tag</button>
                     <button class="text-button" id="clearFolder" type="button" hidden>Limpar pasta</button>
                 </div>
                 <div id="notesList" class="notes-list" aria-live="polite"></div>
@@ -166,6 +172,14 @@
                 <button class="button button-primary" id="addAttachment" type="button">Enviar arquivos</button>
                 <input id="attachmentInput" type="file" multiple hidden>
             </div>
+        </dialog>
+        <dialog id="historyDialog" class="history-dialog" aria-labelledby="historyTitle">
+            <header class="history-dialog-header">
+                <h2 id="historyTitle">Histórico da nota</h2>
+                <button class="icon-button" id="closeHistory" type="button" aria-label="Fechar histórico">×</button>
+            </header>
+            <ul id="historyList" class="history-list"></ul>
+            <p id="historyEmpty" class="history-empty">Nenhuma versão anterior. O histórico começa na primeira edição.</p>
         </dialog>
         <div id="wikilinkAutocomplete" class="wikilink-autocomplete" role="listbox" aria-label="Notas para link" hidden></div>
         <div id="appMessage" class="app-message" role="status" aria-live="polite"></div>

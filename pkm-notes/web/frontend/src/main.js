@@ -7,6 +7,8 @@ const treePageSize = 100;
 const state = {
     mode: 'title',
     folder: '',
+    tag: '',
+    tags: [],
     offset: 0,
     total: 0,
     notes: [],
@@ -26,6 +28,8 @@ const state = {
     pendingOutlineLine: null,
     noteID: null,
     noteFolder: '',
+    noteVersion: null,
+    historyRequestID: 0,
     frontmatterExpanded: false,
     savedDraft: null,
     listState: null,
@@ -54,6 +58,9 @@ const elements = {
     notesList: document.querySelector('#notesList'),
     resultCount: document.querySelector('#resultCount'),
     resultsTitle: document.querySelector('#resultsTitle'),
+    tagFilterBar: document.querySelector('#tagFilterBar'),
+    clearTag: document.querySelector('#clearTag'),
+    clearFolder: document.querySelector('#clearFolder'),
     pagination: document.querySelector('#pagination'),
     pageStatus: document.querySelector('#pageStatus'),
     previousPage: document.querySelector('#previousPage'),
@@ -71,6 +78,10 @@ const elements = {
     wikilinkAutocomplete: document.querySelector('#wikilinkAutocomplete'),
     attachmentsDialog: document.querySelector('#attachmentsDialog'),
     attachmentsButton: document.querySelector('#attachmentsButton'),
+    historyDialog: document.querySelector('#historyDialog'),
+    historyList: document.querySelector('#historyList'),
+    historyEmpty: document.querySelector('#historyEmpty'),
+    historyButton: document.querySelector('#historyButton'),
     attachmentInput: document.querySelector('#attachmentInput'),
     attachmentList: document.querySelector('#attachmentList'),
     attachmentsEmpty: document.querySelector('#attachmentsEmpty'),
@@ -78,7 +89,10 @@ const elements = {
     saveStatus: document.querySelector('#saveStatus'),
     appMessage: document.querySelector('#appMessage'),
     newNote: document.querySelector('#newNote'),
-    deleteCurrentNote: document.querySelector('#deleteCurrentNote')
+    deleteCurrentNote: document.querySelector('#deleteCurrentNote'),
+    exportBackup: document.querySelector('#exportBackup'),
+    importBackup: document.querySelector('#importBackup'),
+    backupInput: document.querySelector('#backupInput')
 };
 
 let previewTimer;
@@ -182,6 +196,7 @@ async function initialize() {
     }
 
     loadFolders();
+    loadTags();
     void loadFolderNotes('', false);
 }
 
@@ -212,6 +227,13 @@ function setupEventListeners() {
     document.querySelector('#fitGraph').addEventListener('click', () => graphView.fit());
     document.querySelector('#graphSearch').addEventListener('input', event => graphView.setSearch(event.target.value));
     elements.newNote.addEventListener('click', () => openNewNote());
+    elements.exportBackup.addEventListener('click', () => void exportBackup());
+    elements.importBackup.addEventListener('click', () => elements.backupInput.click());
+    elements.backupInput.addEventListener('change', () => {
+        const file = elements.backupInput.files?.[0];
+        elements.backupInput.value = '';
+        if (file) void importBackup(file);
+    });
     elements.deleteCurrentNote.addEventListener('click', deleteCurrentNote);
     document.querySelector('#logoutButton').addEventListener('click', async () => {
         try {
@@ -226,6 +248,8 @@ function setupEventListeners() {
         elements.attachmentsDialog.showModal();
         if (state.noteID !== null) void loadAttachments(state.noteID);
     });
+    elements.historyButton.addEventListener('click', () => void openHistory());
+    document.querySelector('#closeHistory').addEventListener('click', () => elements.historyDialog.close());
     document.querySelector('#closeAttachments').addEventListener('click', () => elements.attachmentsDialog.close());
     elements.attachmentsDialog.addEventListener('click', event => {
         if (event.target === elements.attachmentsDialog) elements.attachmentsDialog.close();
@@ -242,6 +266,13 @@ function setupEventListeners() {
     });
     document.querySelector('#themeToggle').addEventListener('click', toggleTheme);
     document.querySelector('#clearFolder').addEventListener('click', () => selectFolder(''));
+    elements.clearTag.addEventListener('click', () => void selectTag(''));
+    elements.tagFilterBar.addEventListener('click', event => {
+        const button = event.target.closest('[data-tag]');
+        if (!button) return;
+        const tag = button.dataset.tag || '';
+        void selectTag(tag.toLowerCase() === state.tag.toLowerCase() ? '' : tag);
+    });
     elements.searchInput.addEventListener('input', () => {
         window.clearTimeout(state.searchTimer);
         state.offset = 0;
@@ -409,6 +440,7 @@ function captureListState() {
         query: elements.searchInput.value,
         mode: state.mode,
         folder: state.folder,
+        tag: state.tag,
         offset: state.offset,
         graphVisible: state.graphVisible
     };
@@ -509,6 +541,7 @@ async function loadNotes() {
         limit: String(pageSize),
         offset: String(state.offset)
     });
+    if (state.tag) params.set('tag', state.tag);
     const endpoint = query ? '/api/search' : '/api/notes';
     if (query) {
         params.set('q', query);
@@ -566,23 +599,34 @@ async function loadFolderNotes(folder, more = false) {
 function renderNotes(page) {
     elements.notesList.replaceChildren();
     const query = elements.searchInput.value.trim();
-    elements.resultsTitle.textContent = query
-        ? `Resultados para “${query}”`
-        : state.folder ? state.folder.split('/').at(-1) : 'Todas as notas';
+    const tagLabel = state.tag ? `#${state.tag}` : '';
+    if (query) {
+        elements.resultsTitle.textContent = tagLabel
+            ? `Resultados para “${query}” em ${tagLabel}`
+            : `Resultados para “${query}”`;
+    } else if (tagLabel) {
+        elements.resultsTitle.textContent = `Notas com ${tagLabel}`;
+    } else {
+        elements.resultsTitle.textContent = state.folder ? state.folder.split('/').at(-1) : 'Todas as notas';
+    }
     elements.resultCount.textContent = `${page.total} ${page.total === 1 ? 'nota' : 'notas'}`;
     if (state.view === 'list') {
         document.querySelector('#currentFolder').textContent = state.folder || 'Todas as notas';
     }
-    document.querySelector('#clearFolder').hidden = !state.folder;
+    elements.clearFolder.hidden = !state.folder;
+    elements.clearTag.hidden = !state.tag;
     if (page.items.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'empty-state';
-        empty.textContent = query ? 'Nenhuma nota corresponde à pesquisa.' : 'Ainda não há notas. Crie uma para começar.';
+        if (query) empty.textContent = 'Nenhuma nota corresponde à pesquisa.';
+        else if (state.tag) empty.textContent = `Nenhuma nota com a tag #${state.tag}.`;
+        else empty.textContent = 'Ainda não há notas. Crie uma para começar.';
         elements.notesList.append(empty);
     } else {
         const contentSearch = Boolean(query && state.mode === 'content');
         for (const note of page.items) elements.notesList.append(createNoteCard(note, contentSearch));
     }
+    renderTagFilter();
     const first = page.total === 0 ? 0 : page.offset + 1;
     const last = Math.min(page.offset + page.items.length, page.total);
     elements.pagination.hidden = page.total <= page.limit;
@@ -620,8 +664,12 @@ function createNoteCard(note, contentSearch) {
     const tags = document.createElement('div');
     tags.className = 'note-tags';
     for (const value of note.tags || []) {
-        const tag = document.createElement('span');
-        tag.className = 'note-tag';
+        const tag = document.createElement('button');
+        tag.type = 'button';
+        tag.className = `note-tag${value.toLowerCase() === state.tag.toLowerCase() ? ' is-active' : ''}`;
+        tag.dataset.action = 'tag';
+        tag.dataset.tag = value;
+        tag.title = `Filtrar por #${value}`;
         tag.textContent = `#${value}`;
         tags.append(tag);
     }
@@ -670,7 +718,259 @@ function handleNoteListClick(event) {
     if (!card || !action) return;
     const id = Number(card.dataset.noteId);
     if (action.dataset.action === 'open') void openNote(id);
+    else if (action.dataset.action === 'tag') void selectTag(action.dataset.tag || '');
     else if (action.dataset.action === 'delete') void deleteNote(id);
+}
+
+async function loadTags() {
+    try {
+        const tags = await requestJSON('/api/tags');
+        if (!Array.isArray(tags)) throw new Error('resposta de tags inválida');
+        state.tags = tags;
+        renderTagFilter();
+    } catch (error) {
+        state.tags = [];
+        renderTagFilter();
+    }
+}
+
+function renderTagFilter() {
+    elements.tagFilterBar.replaceChildren();
+    const tags = state.tags.filter(tag => tag && tag.name);
+    elements.tagFilterBar.hidden = tags.length === 0;
+    for (const tag of tags) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `tag-filter${tag.name.toLowerCase() === state.tag.toLowerCase() ? ' is-active' : ''}`;
+        button.dataset.tag = tag.name;
+        button.setAttribute('aria-pressed', String(tag.name.toLowerCase() === state.tag.toLowerCase()));
+        button.title = `Filtrar por #${tag.name}`;
+        const name = document.createElement('span');
+        name.textContent = `#${tag.name}`;
+        const count = document.createElement('span');
+        count.className = 'tag-filter-count';
+        count.textContent = String(tag.count);
+        button.append(name, count);
+        elements.tagFilterBar.append(button);
+    }
+}
+
+async function exportBackup() {
+    const button = elements.exportBackup;
+    button.disabled = true;
+    try {
+        const response = await fetch('/api/backup');
+        if (response.status === 401) {
+            location.replace('/login.html');
+            return;
+        }
+        if (!response.ok) {
+            throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
+        }
+        const blob = await response.blob();
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const match = /filename="?([^";]+)"?/i.exec(disposition);
+        const filename = match ? match[1] : `pkm-notes-${new Date().toISOString().slice(0, 10)}.zip`;
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        showMessage('Backup exportado.', 'success');
+    } catch (error) {
+        showMessage(`Não foi possível exportar o backup: ${error.message}`, 'error');
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function importBackup(file) {
+    if (!window.confirm(
+        'Restaurar este backup substitui TODAS as notas, pastas, tags, histórico e anexos atuais.\n\n' +
+        'Essa ação não pode ser desfeita. Deseja continuar?'
+    )) return;
+    const button = elements.importBackup;
+    button.disabled = true;
+    try {
+        window.clearTimeout(state.saveTimer);
+        if (state.savePromise) await state.savePromise;
+        const response = await fetch('/api/backup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/zip' },
+            body: file
+        });
+        if (response.status === 401) {
+            location.replace('/login.html');
+            return;
+        }
+        if (!response.ok) {
+            throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
+        }
+        const result = await response.json();
+        window.alert(
+            `Backup restaurado: ${result.notes} ${result.notes === 1 ? 'nota' : 'notas'} e ` +
+            `${result.attachments} ${result.attachments === 1 ? 'anexo' : 'anexos'}.\n\n` +
+            'A página será recarregada.'
+        );
+        location.replace('/');
+    } catch (error) {
+        showMessage(`Não foi possível restaurar o backup: ${error.message}`, 'error');
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function openHistory() {
+    if (state.noteID === null) return;
+    if (!(await flushSave())) return;
+    const noteID = state.noteID;
+    elements.historyDialog.showModal();
+    await loadHistory(noteID);
+}
+
+async function loadHistory(noteID) {
+    const requestID = ++state.historyRequestID;
+    elements.historyList.replaceChildren();
+    elements.historyEmpty.hidden = true;
+    try {
+        const versions = await requestJSON(`/api/notes/${noteID}/versions`);
+        if (requestID !== state.historyRequestID || state.noteID !== noteID) return;
+        if (!Array.isArray(versions)) throw new Error('resposta de histórico inválida');
+        renderHistory(noteID, versions);
+    } catch (error) {
+        if (requestID !== state.historyRequestID) return;
+        elements.historyEmpty.hidden = false;
+        elements.historyEmpty.textContent = `Não foi possível carregar o histórico: ${error.message}`;
+    }
+}
+
+function renderHistory(noteID, versions) {
+    elements.historyList.replaceChildren();
+    if (versions.length === 0) {
+        elements.historyEmpty.hidden = false;
+        elements.historyEmpty.textContent = 'Nenhuma versão anterior. O histórico começa na primeira edição.';
+        return;
+    }
+    elements.historyEmpty.hidden = true;
+    for (const version of versions) {
+        const item = document.createElement('li');
+        item.className = 'history-item';
+
+        const header = document.createElement('div');
+        header.className = 'history-item-header';
+        const label = document.createElement('strong');
+        label.textContent = `Versão ${version.version}`;
+        const when = document.createElement('span');
+        when.className = 'history-date';
+        when.textContent = formatHistoryDate(version.created_at);
+        header.append(label, when);
+
+        const title = document.createElement('div');
+        title.className = 'history-title';
+        title.textContent = version.title || 'Sem título';
+
+        const preview = document.createElement('p');
+        preview.className = 'history-preview';
+        preview.textContent = version.preview || 'Nota vazia.';
+
+        const actions = document.createElement('div');
+        actions.className = 'history-actions';
+        const view = document.createElement('button');
+        view.type = 'button';
+        view.className = 'text-button';
+        view.textContent = 'Ver conteúdo';
+        view.addEventListener('click', () => void toggleHistoryContent(
+            noteID, version, item, view
+        ));
+        const restore = document.createElement('button');
+        restore.type = 'button';
+        restore.className = 'text-button';
+        restore.textContent = 'Restaurar';
+        restore.addEventListener('click', () => void restoreVersion(noteID, version));
+        actions.append(view, restore);
+
+        item.append(header, title, preview, actions);
+        elements.historyList.append(item);
+    }
+}
+
+function formatHistoryDate(value) {
+    if (!value) return '';
+    const parsed = new Date(String(value).replace(' ', 'T') + (String(value).includes('Z') ? '' : 'Z'));
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleString('pt-BR');
+}
+
+async function toggleHistoryContent(noteID, version, item, button) {
+    const existing = item.querySelector('.history-content');
+    if (existing) {
+        existing.remove();
+        button.textContent = 'Ver conteúdo';
+        return;
+    }
+    button.disabled = true;
+    try {
+        const detail = await requestJSON(`/api/notes/${noteID}/versions/${version.id}`);
+        const content = document.createElement('pre');
+        content.className = 'history-content';
+        content.textContent = detail.content || 'Nota vazia.';
+        item.append(content);
+        button.textContent = 'Ocultar conteúdo';
+    } catch (error) {
+        showMessage(`Não foi possível abrir a versão: ${error.message}`, 'error');
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function restoreVersion(noteID, version) {
+    if (!window.confirm(
+        `Restaurar a versão ${version.version}?\n\n` +
+        'O conteúdo atual será guardado no histórico antes da restauração.'
+    )) return;
+    try {
+        const note = await requestJSON(`/api/notes/${noteID}/versions/${version.id}/restore`, {
+            method: 'POST',
+            body: JSON.stringify({ version: state.noteVersion })
+        });
+        elements.historyDialog.close();
+        showEditor(note);
+        state.graphData = null;
+        void Promise.all([loadNotes(), loadTags()]);
+        showMessage('Versão restaurada.', 'success');
+    } catch (error) {
+        if (error.status === 409 && error.body?.note) {
+            elements.historyDialog.close();
+            showEditor(error.body.note);
+            showMessage('A nota foi alterada em outra aba. A versão mais recente foi carregada.', 'error');
+            return;
+        }
+        showMessage(`Não foi possível restaurar a versão: ${error.message}`, 'error');
+    }
+}
+
+async function selectTag(tag) {
+    if (state.view === 'editor' && !(await flushSave())) return;
+    if (state.graphVisible) closeGraphView();
+    if (state.view === 'editor') {
+        history.pushState({ view: 'list', list: { ...captureListState(), tag, offset: 0 } }, '', location.pathname);
+        state.view = 'list';
+        state.noteID = null;
+        resetBacklinks();
+        resetOutline();
+        document.body.classList.remove('is-editor-view');
+        elements.editorView.hidden = true;
+        elements.searchView.hidden = false;
+        elements.newNote.hidden = false;
+    }
+    state.tag = tag;
+    state.offset = 0;
+    updateListHistory();
+    await loadNotes();
+    if (elements.panel.dataset.panel === 'search') elements.searchInput.focus();
 }
 
 function scheduleWikilinkSuggestions() {
@@ -895,6 +1195,7 @@ function showEditor(note) {
     document.body.classList.add('is-editor-view');
     state.view = 'editor';
     state.noteID = note?.id ?? null;
+    state.noteVersion = note?.version ?? null;
     elements.searchView.hidden = true;
     elements.graphView.hidden = true;
     elements.editorView.hidden = false;
@@ -952,6 +1253,7 @@ async function refreshOpenNoteAfterMove() {
         const note = await requestJSON(`/api/notes/${id}`);
         if (state.view !== 'editor' || state.noteID !== id || isDraftDirty()) return;
         state.noteFolder = note.folder;
+        state.noteVersion = note.version ?? state.noteVersion;
         const content = ensureFrontmatterTags(note.content, note.tags || []);
         if (content !== elements.noteContent.value) {
             elements.noteContent.value = content;
@@ -1011,12 +1313,32 @@ async function persistDraft() {
         return false;
     }
     const id = state.noteID;
+    if (id !== null) note.version = state.noteVersion;
     const endpoint = id === null ? '/api/notes' : `/api/notes/${id}`;
     const method = id === null ? 'POST' : 'PUT';
     setSaveStatus('Salvando…', 'pending');
     const job = (async () => {
         try {
-            const saved = await requestJSON(endpoint, { method, body: JSON.stringify(note) });
+            let saved;
+            try {
+                saved = await requestJSON(endpoint, { method, body: JSON.stringify(note) });
+            } catch (error) {
+                if (error.status !== 409 || !error.body?.note || id === null) throw error;
+                const reload = window.confirm(
+                    'Esta nota foi alterada em outra aba.\n\n' +
+                    'OK: recarregar a versão mais recente e descartar suas mudanças.\n' +
+                    'Cancelar: manter suas mudanças e sobrescrever a versão mais recente.'
+                );
+                if (reload) {
+                    showEditor(error.body.note);
+                    setSaveStatus('Versão mais recente carregada', 'saved');
+                    return false;
+                }
+                state.noteVersion = error.body.note.version;
+                note.version = state.noteVersion;
+                saved = await requestJSON(endpoint, { method, body: JSON.stringify(note) });
+            }
+            state.noteVersion = saved.version ?? state.noteVersion;
             state.graphData = null;
             if (id === null) {
                 state.noteID = saved.id;
@@ -1039,7 +1361,7 @@ async function persistDraft() {
             setSaveStatus('Salvo automaticamente', 'saved');
             state.folderNotesGeneration++;
             state.folderNotes.clear();
-            void Promise.all([loadFolders(), loadNotes()]);
+            void Promise.all([loadFolders(), loadNotes(), loadTags()]);
             void loadFolderNotes('', false);
             return true;
         } catch (error) {
@@ -1215,6 +1537,7 @@ function restoreListState(listState) {
     elements.searchInput.value = listState.query || '';
     state.mode = listState.mode || 'title';
     state.folder = listState.folder || '';
+    state.tag = listState.tag || '';
     state.offset = listState.offset || 0;
     state.graphVisible = Boolean(listState.graphVisible);
     elements.graphView.hidden = !state.graphVisible;
@@ -1289,7 +1612,7 @@ async function deleteCurrentNote() {
         state.folderNotesGeneration++;
         state.folderNotes.clear();
         navigateBack();
-        void Promise.all([loadFolders(), loadNotes()]);
+        void Promise.all([loadFolders(), loadNotes(), loadTags()]);
         void loadFolderNotes('', false);
     } catch (error) {
         setSaveStatus(`Não foi possível excluir: ${error.message}`, 'error');
@@ -1318,7 +1641,7 @@ async function deleteNote(id) {
             resetOutline();
             if (state.directEntry) await returnToList(state.listState || captureListState(), true);
             else history.back();
-            void Promise.all([loadFolders(), loadNotes()]);
+            void Promise.all([loadFolders(), loadNotes(), loadTags()]);
             void loadFolderNotes('', false);
             return;
         }
@@ -2323,9 +2646,20 @@ async function requestJSON(url, options = {}) {
         }
     });
     if (!response.ok) {
-        const message = (await response.text()).trim();
+        const text = (await response.text()).trim();
+        let body = null;
+        if (text) {
+            try {
+                body = JSON.parse(text);
+            } catch (error) {
+                body = null;
+            }
+        }
         if (response.status === 401) location.replace('/login.html');
-        throw new Error(message || `HTTP ${response.status}`);
+        const error = new Error(body?.error || text || `HTTP ${response.status}`);
+        error.status = response.status;
+        error.body = body;
+        throw error;
     }
     if (response.status === 204) return null;
     return response.json();

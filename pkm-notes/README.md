@@ -21,7 +21,7 @@ O script compila o backend com FTS5 e inicia o servidor em `http://localhost:800
 ./run.sh --data-dir ./meus-dados --port 8080
 ```
 
-`PORT` e `NOTES_DIR` também podem fornecer os valores padrão. O banco fica em `notes.db` dentro do diretório de dados. Na primeira inicialização, o app cria o índice FTS5 e o índice de vínculos entre notas, indexando as notas existentes sem substituir os registros.
+`PORT` e `NOTES_DIR` também podem fornecer os valores padrão. O banco fica em `notes.db` dentro do diretório de dados. Na primeira inicialização, o app cria o índice FTS5, o índice de vínculos entre notas e as tabelas de histórico, indexando as notas existentes sem substituir os registros.
 
 Para exigir senha, defina `AUTHENTICATION_PASSWORD` antes de iniciar:
 
@@ -43,7 +43,7 @@ Antes de iniciar, o script verifica a porta escolhida e encerra uma instância a
 
 Para ARM64, compile nativamente no dispositivo ou configure um compilador C cruzado para o alvo. Como SQLite usa `cgo`, `GOARCH=arm64` isoladamente não produz um binário executável com o driver.
 
-## Recursos do MVP
+## Recursos
 
 - Busca paginada por título ou conteúdo, com FTS5.
 - Árvore de pastas virtual com notas clicáveis dentro de cada pasta; os itens são carregados sob demanda em lotes e podem ser movidos por arrastar e soltar.
@@ -54,38 +54,45 @@ Para ARM64, compile nativamente no dispositivo ou configure um compilador C cruz
 - Ao renomear uma nota, os links de entrada são atualizados: wikilinks (`[[Título]]`, `[[Título|alias]]`, `[[Pasta/Título]]`, `[[Título.md]]`, `[[Título#seção]]`), links Markdown e definições de referência passam a apontar para o novo título, preservando aliases, âncoras e trechos de código. Backlinks e grafo continuam apontando para a nota renomeada.
 - Mover uma nota ou uma pasta preserva os links baseados em caminho: destinos relativos são recalculados a partir da nova localização e caminhos absolutos (`/Pasta/Nota`) acompanham a pasta movida, tanto nos links de entrada quanto nos de saída. Links por título e trechos de código permanecem inalterados.
 - Editor Markdown próprio, inspirado no fluxo do Basalt, com barra de formatação, atalhos (`Ctrl/Cmd+B`, `I`, `K` e `Ctrl/Cmd+Alt+T` para inserir tabela; `Ctrl/Cmd+Alt+1/2/3` para escolher o modo e `Ctrl/Cmd+Alt+V` para alternar), desfazer/refazer, divisor redimensionável e modos dividido, edição e leitura.
-- Tags são lidas do frontmatter Markdown (`tags: sei-la`, lista YAML ou lista inline); tags legadas são migradas para o frontmatter quando a nota é aberta para edição.
+- Tags são lidas do frontmatter Markdown (`tags: sei-la`, lista YAML ou lista inline); tags legadas são migradas para o frontmatter quando a nota é aberta para edição. As tags aparecem no topo da lista e nos cards, podem ser clicadas para filtrar as notas e a API expõe a contagem de cada tag.
+- Cada alteração guarda uma versão anterior no histórico da nota (até 50 por nota). O editor permite listar, visualizar e restaurar versões; a restauração também cria um ponto de retorno.
+- Duas abas do navegador não sobrescrevem mais uma à outra silenciosamente: o editor envia a versão da nota junto com o salvamento e o servidor responde `409 Conflict` quando outra sessão já alterou o registro.
+- Exportação e restauração de backup completo em um único arquivo `.zip`, com notas, pastas, tags, vínculos, histórico e anexos.
 - Interface adaptada para desktop e mobile; tema claro/escuro.
 
 O preview usa Goldmark no backend. HTML bruto é mantido inativo e destinos com esquemas inseguros em links/imagens são neutralizados.
 
 ## Dados, anexos e backup
 
-- As notas, seus caminhos de pasta virtuais e metadados ficam em `notes.db` no diretório de dados. O índice de busca FTS5 e o índice de vínculos (`note_links`) são mantidos no mesmo banco. O grafo e os backlinks são resolvidos a partir desse índice, sem reler o conteúdo de todas as notas a cada consulta.
+- As notas, seus caminhos de pasta virtuais e metadados ficam em `notes.db` no diretório de dados. O índice de busca FTS5 e o índice de vínculos (`note_links`) são mantidos no mesmo banco. O grafo e os backlinks são resolvidos a partir desse índice, sem reler o conteúdo de todas as notas a cada consulta. O histórico de versões fica na tabela `note_versions` do mesmo banco.
 - Anexos são gravados em `attachments/<id-da-nota>/` no mesmo diretório de dados. O nome físico é aleatório; o nome original e o tipo de mídia ficam nos metadados SQLite. Assim, mover a nota para outra pasta virtual não move nem quebra o arquivo.
 - Ao excluir uma nota, seus metadados de anexos são removidos pelo SQLite e os arquivos daquela nota são apagados do disco.
-- Para fazer backup completo, pare o servidor e copie **o arquivo `notes.db` e a pasta `attachments/` juntos**. Restaurar somente o banco preserva as referências, mas não recupera o conteúdo dos arquivos; restaurar somente os anexos não recupera as notas nem os metadados.
+- Use **Exportar** na barra superior para baixar um `.zip` com `manifest.json` e todos os anexos. **Importar** valida o arquivo e substitui notas, pastas, tags, histórico e anexos atuais; IDs de notas e anexos são preservados para que os links dentro do conteúdo continuem funcionando. A importação é tudo ou nada: um arquivo inválido não altera os dados existentes.
+- Para backup manual, ainda é possível parar o servidor e copiar **o arquivo `notes.db` e a pasta `attachments/` juntos**. Restaurar somente o banco preserva as referências, mas não recupera o conteúdo dos arquivos; restaurar somente os anexos não recupera as notas nem os metadados.
 - As pastas exibidas na árvore são virtuais: não são criadas como diretórios no disco. Apenas os anexos usam armazenamento em arquivos.
 
 Ao anexar um arquivo pelo editor, uma imagem raster compatível é inserida como `![nome](URL)` e outros arquivos como `[nome](URL)`. A URL usa o ID da nota e do anexo; com autenticação ativada, o download também requer uma sessão válida.
 
 ## API principal
 
-- `GET /api/notes?limit=30&offset=0&folder=...`
+- `GET /api/notes?limit=30&offset=0&folder=...&tag=...`
 - `POST /api/notes`
-- `GET`, `PUT` e `DELETE /api/notes/{id}`
-- `GET /api/search?q=...&mode=title|content&limit=30&offset=0&folder=...`
+- `GET`, `PUT` e `DELETE /api/notes/{id}` (`PUT` aceita `version`; uma versão desatualizada retorna `409` com `{ "error", "note" }`)
+- `GET /api/search?q=...&mode=title|content&limit=30&offset=0&folder=...&tag=...`
+- `GET /api/tags` (nome e contagem de cada tag, sem diferenciar maiúsculas)
 - `GET /api/folders`
 - `POST /api/folders/move` com `{ "source": "Antiga", "target": "Arquivo" }`
 - `PATCH /api/notes/{id}/folder` com `{ "folder": "Projetos" }`
 - `GET /api/folder-notes?folder=Projetos&limit=100&offset=0` (inclua `folder=` para listar somente notas sem pasta)
 - `GET /api/notes/{id}/backlinks` e `GET /api/graph`
+- `GET /api/notes/{id}/versions`; `GET /api/notes/{id}/versions/{version_id}`; `POST /api/notes/{id}/versions/{version_id}/restore` com `{ "version": 12 }`
+- `GET /api/backup` (download `.zip`) e `POST /api/backup` (corpo binário do `.zip`)
 - `GET` e `POST /api/notes/{id}/attachments`; `GET` e `DELETE /api/notes/{id}/attachments/{attachment_id}` (upload multipart no campo `file`)
 - `GET /api/auth/status`, `POST /api/auth/login` e `POST /api/auth/logout`
 - `POST /api/preview` com o corpo Markdown em texto simples
 - `GET /api/health`
 
-Listagens aceitam limites de 1 a 100 registros. Títulos aceitam até 256 caracteres, conteúdo até 5 MiB e caminhos de pasta devem ser relativos. Uploads aceitam um arquivo de até 25 MiB; são enviados como `multipart/form-data` usando o campo `file`. Links para anexos são servidos como download; imagens raster podem ser exibidas inline com `?inline=1`.
+Listagens aceitam limites de 1 a 100 registros e filtram por tag exata, sem diferenciar maiúsculas de minúsculas. Títulos aceitam até 256 caracteres, conteúdo até 5 MiB e caminhos de pasta devem ser relativos. Uploads aceitam um arquivo de até 25 MiB; são enviados como `multipart/form-data` usando o campo `file`. Links para anexos são servidos como download; imagens raster podem ser exibidas inline com `?inline=1`. O histórico mantém as 50 versões mais recentes de cada nota.
 
 O endpoint do grafo retorna `{ "nodes": [{ "id", "title", "folder" }], "edges": [{ "source", "target", "type" }] }`. Os tipos de aresta são `markdown` e `wikilink`. Wikilinks aceitam `[[Título]]` e `[[Título|alias]]`; links Markdown locais resolvem caminhos de nota com ou sem extensão `.md`. URLs externas não viram relações entre notas.
 

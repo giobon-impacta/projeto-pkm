@@ -394,8 +394,11 @@ func rewriteIncomingLinks(tx *sql.Tx, noteID int64, newTitle string, byPath, byT
 		if !changed {
 			continue
 		}
-		if _, err := tx.Exec(`UPDATE notes SET content = ?, updated_at = datetime('now')
-			WHERE rowid = ?`, rewritten, id); err != nil {
+		if err := snapshotNoteVersion(tx, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE notes SET content = ?, version = version + 1,
+			updated_at = datetime('now') WHERE rowid = ?`, rewritten, id); err != nil {
 			return err
 		}
 		if err := replaceNoteLinks(tx, id, rewritten); err != nil {
@@ -694,8 +697,11 @@ func relinkNotesAfterMove(tx *sql.Tx, before, after []indexedNote, skipSourceID 
 		if !changed {
 			continue
 		}
-		if _, err := tx.Exec(`UPDATE notes SET content = ?, updated_at = datetime('now')
-			WHERE rowid = ?`, rewritten, id); err != nil {
+		if err := snapshotNoteVersion(tx, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE notes SET content = ?, version = version + 1,
+			updated_at = datetime('now') WHERE rowid = ?`, rewritten, id); err != nil {
 			return err
 		}
 		if err := replaceNoteLinks(tx, id, rewritten); err != nil {

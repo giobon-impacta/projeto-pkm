@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unicode"
@@ -37,12 +38,15 @@ const (
 	maxRequestSize  = maxContentSize + (64 << 10)
 )
 
+var ErrVersionConflict = errors.New("note was modified by another session")
+
 type Note struct {
 	ID        int64    `json:"id"`
 	Title     string   `json:"title"`
 	Content   string   `json:"content"`
 	Folder    string   `json:"folder"`
 	Tags      []string `json:"tags,omitempty"`
+	Version   int64    `json:"version"`
 	CreatedAt string   `json:"created_at"`
 	UpdatedAt string   `json:"updated_at"`
 }
@@ -69,10 +73,16 @@ type Folder struct {
 	Children []Folder `json:"children"`
 }
 
+type TagCount struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
 type App struct {
 	db             *sql.DB
 	attachmentsDir string
 	auth           *authenticator
+	backupMu       sync.Mutex
 }
 
 type folderBuilder struct {
@@ -148,6 +158,7 @@ func (a *App) migrate() error {
 			content TEXT DEFAULT '',
 			folder TEXT DEFAULT '',
 			tags TEXT DEFAULT '',
+			version INTEGER NOT NULL DEFAULT 1,
 			created_at TEXT DEFAULT (datetime('now')),
 			updated_at TEXT DEFAULT (datetime('now'))
 		)`,
@@ -182,6 +193,8 @@ func (a *App) migrate() error {
 	}{
 		{version: 1, apply: migrateSearchIndex},
 		{version: 2, apply: migrateNoteLinks},
+		{version: 3, apply: migrateNoteVersions},
+		{version: 4, apply: migrateNoteHistory},
 	}
 	for _, migration := range migrations {
 		var applied int
@@ -295,14 +308,55 @@ func migrateNoteLinks(tx *sql.Tx) error {
 	return nil
 }
 
-func (a *App) ListNotes(folder string, limit, offset int) (Page, error) {
+// migrateNoteVersions adds the optimistic-concurrency counter used by the
+// editor. Existing databases get the column through ALTER TABLE; new
+// databases already create it in the base schema.
+func migrateNoteVersions(tx *sql.Tx) error {
+	rows, err := tx.Query("PRAGMA table_info(notes)")
+	if err != nil {
+		return err
+	}
+	hasVersion := false
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == "version" {
+			hasVersion = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if hasVersion {
+		return nil
+	}
+	_, err = tx.Exec("ALTER TABLE notes ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+	return err
+}
+
+func (a *App) ListNotes(folder, tag string, limit, offset int) (Page, error) {
 	var total int
-	if err := a.db.QueryRow("SELECT COUNT(*) FROM notes WHERE folder = ? OR ? = ''", folder, folder).Scan(&total); err != nil {
+	if err := a.db.QueryRow(`SELECT COUNT(*) FROM notes
+		WHERE (folder = ? OR ? = '')
+		AND (? = '' OR instr(',' || lower(COALESCE(tags, '')) || ',', ',' || lower(?) || ',') > 0)`,
+		folder, folder, tag, tag).Scan(&total); err != nil {
 		return Page{}, err
 	}
 	rows, err := a.db.Query(`SELECT rowid, title, folder, substr(COALESCE(content, ''), 1, 180), updated_at, COALESCE(tags, '')
-		FROM notes WHERE folder = ? OR ? = ''
-		ORDER BY updated_at DESC, rowid DESC LIMIT ? OFFSET ?`, folder, folder, limit, offset)
+		FROM notes
+		WHERE (folder = ? OR ? = '')
+		AND (? = '' OR instr(',' || lower(COALESCE(tags, '')) || ',', ',' || lower(?) || ',') > 0)
+		ORDER BY updated_at DESC, rowid DESC LIMIT ? OFFSET ?`,
+		folder, folder, tag, tag, limit, offset)
 	if err != nil {
 		return Page{}, err
 	}
@@ -333,7 +387,55 @@ func (a *App) ListFolderNotes(folder string, limit, offset int) (Page, error) {
 	return Page{Items: items, Total: total, Limit: limit, Offset: offset}, nil
 }
 
-func (a *App) SearchNotes(query, mode, folder string, limit, offset int) (Page, error) {
+func (a *App) Tags() ([]TagCount, error) {
+	rows, err := a.db.Query("SELECT COALESCE(tags, '') FROM notes")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int)
+	names := make(map[string]string)
+	for rows.Next() {
+		var tags string
+		if err := rows.Scan(&tags); err != nil {
+			return nil, err
+		}
+		seen := make(map[string]struct{})
+		for _, tag := range strings.Split(tags, ",") {
+			tag = strings.TrimSpace(tag)
+			if tag == "" {
+				continue
+			}
+			key := strings.ToLower(tag)
+			if _, duplicate := seen[key]; duplicate {
+				continue
+			}
+			seen[key] = struct{}{}
+			if _, exists := names[key]; !exists {
+				names[key] = tag
+			}
+			counts[key]++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	result := make([]TagCount, 0, len(counts))
+	for key, count := range counts {
+		result = append(result, TagCount{Name: names[key], Count: count})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Count != result[j].Count {
+			return result[i].Count > result[j].Count
+		}
+		return strings.ToLower(result[i].Name) < strings.ToLower(result[j].Name)
+	})
+	return result, nil
+}
+
+func (a *App) SearchNotes(query, mode, folder, tag string, limit, offset int) (Page, error) {
 	match, err := makeFTSQuery(query, mode)
 	if err != nil {
 		return Page{}, err
@@ -345,15 +447,17 @@ func (a *App) SearchNotes(query, mode, folder string, limit, offset int) (Page, 
 	var total int
 	if err := a.db.QueryRow(`SELECT COUNT(*)
 		FROM notes_fts JOIN notes n ON n.rowid = notes_fts.rowid
-		WHERE notes_fts MATCH ? AND (n.folder = ? OR ? = '')`,
-		match, folder, folder).Scan(&total); err != nil {
+		WHERE notes_fts MATCH ? AND (n.folder = ? OR ? = '')
+		AND (? = '' OR instr(',' || lower(COALESCE(n.tags, '')) || ',', ',' || lower(?) || ',') > 0)`,
+		match, folder, folder, tag, tag).Scan(&total); err != nil {
 		return Page{}, err
 	}
 	rows, err := a.db.Query(`SELECT n.rowid, n.title, n.folder, `+preview+`, n.updated_at, COALESCE(n.tags, '')
 		FROM notes_fts JOIN notes n ON n.rowid = notes_fts.rowid
 		WHERE notes_fts MATCH ? AND (n.folder = ? OR ? = '')
+		AND (? = '' OR instr(',' || lower(COALESCE(n.tags, '')) || ',', ',' || lower(?) || ',') > 0)
 		ORDER BY notes_fts.rank, n.updated_at DESC, n.rowid DESC LIMIT ? OFFSET ?`,
-		match, folder, folder, limit, offset)
+		match, folder, folder, tag, tag, limit, offset)
 	if err != nil {
 		return Page{}, err
 	}
@@ -410,8 +514,9 @@ func (a *App) GetNote(id int64) (Note, error) {
 	var note Note
 	var tags string
 	err := a.db.QueryRow(`SELECT rowid, title, COALESCE(content, ''), COALESCE(folder, ''),
-		COALESCE(tags, ''), created_at, updated_at FROM notes WHERE rowid = ?`, id).
-		Scan(&note.ID, &note.Title, &note.Content, &note.Folder, &tags, &note.CreatedAt, &note.UpdatedAt)
+		COALESCE(tags, ''), version, created_at, updated_at FROM notes WHERE rowid = ?`, id).
+		Scan(&note.ID, &note.Title, &note.Content, &note.Folder, &tags, &note.Version,
+			&note.CreatedAt, &note.UpdatedAt)
 	if err != nil {
 		return Note{}, err
 	}
@@ -462,8 +567,15 @@ func (a *App) UpdateNote(id int64, note Note) error {
 	}
 	defer tx.Rollback()
 	var oldTitle, oldFolder string
-	if err := tx.QueryRow("SELECT title, COALESCE(folder, '') FROM notes WHERE rowid = ?", id).
-		Scan(&oldTitle, &oldFolder); err != nil {
+	var oldVersion int64
+	if err := tx.QueryRow("SELECT title, COALESCE(folder, ''), version FROM notes WHERE rowid = ?", id).
+		Scan(&oldTitle, &oldFolder, &oldVersion); err != nil {
+		return err
+	}
+	if note.Version > 0 && note.Version != oldVersion {
+		return ErrVersionConflict
+	}
+	if err := snapshotNoteVersion(tx, id); err != nil {
 		return err
 	}
 	titleChanged := oldTitle != note.Title
@@ -480,7 +592,7 @@ func (a *App) UpdateNote(id int64, note Note) error {
 		}
 	}
 	result, err := tx.Exec(`UPDATE notes SET title = ?, content = ?, folder = ?, tags = ?,
-		updated_at = datetime('now') WHERE rowid = ?`,
+		version = version + 1, updated_at = datetime('now') WHERE rowid = ?`,
 		note.Title, note.Content, note.Folder, strings.Join(note.Tags, ","), id)
 	if err != nil {
 		return err
@@ -525,7 +637,11 @@ func (a *App) MoveNoteFolder(id int64, folder string) error {
 	if err != nil {
 		return err
 	}
-	result, err := tx.Exec(`UPDATE notes SET folder = ?, updated_at = datetime('now') WHERE rowid = ?`, folder, id)
+	if err := snapshotNoteVersion(tx, id); err != nil {
+		return err
+	}
+	result, err := tx.Exec(`UPDATE notes SET folder = ?, version = version + 1,
+		updated_at = datetime('now') WHERE rowid = ?`, folder, id)
 	if err != nil {
 		return err
 	}
@@ -599,8 +715,15 @@ func (a *App) MoveFolder(source, target string) (string, int64, error) {
 	if maxPathLength > 1024 {
 		return "", 0, errors.New("destination would make a folder path exceed the 1024 byte limit")
 	}
+	for _, note := range before {
+		if note.Folder == source || strings.HasPrefix(note.Folder, source+"/") {
+			if err := snapshotNoteVersion(tx, note.ID); err != nil {
+				return "", 0, err
+			}
+		}
+	}
 	if _, err := tx.Exec(`UPDATE notes SET folder = ? || substr(folder, length(?) + 1),
-		updated_at = datetime('now')
+		version = version + 1, updated_at = datetime('now')
 		WHERE folder = ? OR substr(folder, 1, length(?) + 1) = ? || '/'`,
 		destination, source, source, source, source); err != nil {
 		return "", 0, err
@@ -799,6 +922,8 @@ func (a *App) Handler(frontendDir string) http.Handler {
 	mux.HandleFunc("/api/notes", a.handleNotes)
 	mux.HandleFunc("/api/notes/", a.handleNote)
 	mux.HandleFunc("/api/search", a.handleSearch)
+	mux.HandleFunc("/api/tags", a.handleTags)
+	mux.HandleFunc("/api/backup", a.handleBackup)
 	mux.HandleFunc("/api/folders", a.handleFolders)
 	mux.HandleFunc("/api/folders/move", a.handleFolderMove)
 	mux.HandleFunc("/api/folder-notes", a.handleFolderNotes)
@@ -844,7 +969,7 @@ func (a *App) handleNotes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		page, err := a.ListNotes(r.URL.Query().Get("folder"), limit, offset)
+		page, err := a.ListNotes(r.URL.Query().Get("folder"), r.URL.Query().Get("tag"), limit, offset)
 		if err != nil {
 			log.Printf("list notes: %v", err)
 			http.Error(w, "failed to list notes", http.StatusInternalServerError)
@@ -883,8 +1008,29 @@ func (a *App) handleNote(w http.ResponseWriter, r *http.Request) {
 	rawID := strings.TrimPrefix(r.URL.Path, "/api/notes/")
 	parts := strings.Split(rawID, "/")
 	id, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil || id < 1 || len(parts) > 3 {
+	if err != nil || id < 1 || len(parts) > 4 {
 		http.Error(w, "invalid note ID", http.StatusBadRequest)
+		return
+	}
+	if len(parts) >= 2 && parts[1] == "versions" {
+		if len(parts) == 2 {
+			a.handleNoteVersions(w, r, id)
+			return
+		}
+		versionID, parseErr := strconv.ParseInt(parts[2], 10, 64)
+		if parseErr != nil || versionID < 1 || len(parts) > 4 {
+			http.Error(w, "invalid version ID", http.StatusBadRequest)
+			return
+		}
+		if len(parts) == 3 {
+			a.handleNoteVersion(w, r, id, versionID)
+			return
+		}
+		if parts[3] != "restore" {
+			http.Error(w, "invalid note version endpoint", http.StatusBadRequest)
+			return
+		}
+		a.handleNoteVersionRestore(w, r, id, versionID)
 		return
 	}
 	if len(parts) == 2 && parts[1] == "folder" {
@@ -939,6 +1085,17 @@ func (a *App) handleNote(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := a.UpdateNote(id, note); errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
+		} else if errors.Is(err, ErrVersionConflict) {
+			current, getErr := a.GetNote(id)
+			if getErr != nil {
+				log.Printf("read conflicting note %d: %v", id, getErr)
+				http.Error(w, "note was modified by another session", http.StatusConflict)
+				return
+			}
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error": "note was modified by another session",
+				"note":  current,
+			})
 		} else if err != nil {
 			log.Printf("update note %d: %v", id, err)
 			http.Error(w, "failed to update note", http.StatusInternalServerError)
@@ -976,7 +1133,7 @@ func (a *App) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page, err := a.SearchNotes(r.URL.Query().Get("q"), r.URL.Query().Get("mode"),
-		r.URL.Query().Get("folder"), limit, offset)
+		r.URL.Query().Get("folder"), r.URL.Query().Get("tag"), limit, offset)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -996,6 +1153,20 @@ func (a *App) handleFolders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, folders)
+}
+
+func (a *App) handleTags(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	tags, err := a.Tags()
+	if err != nil {
+		log.Printf("load tags: %v", err)
+		http.Error(w, "failed to load tags", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, tags)
 }
 
 func (a *App) handleFolderMove(w http.ResponseWriter, r *http.Request) {
