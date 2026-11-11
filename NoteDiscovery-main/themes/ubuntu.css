@@ -1,0 +1,39 @@
+/* Ubuntu Color Theme — matches radu-matei.vscode-ubuntu-color-theme (VS Code) */
+/* @theme-type: dark */
+
+:root[data-theme="ubuntu"] {
+  /* Backgrounds — editor #300a24, sidebar #2a091f, inputs #3d0d2d, activity #23071a */
+  --bg-primary: #300a24;
+  --bg-secondary: #2a091f;
+  --bg-tertiary: #3d0d2d;
+  --bg-hover: #450e33;
+  --bg-active: #4a0f37;
+
+  /* Text — editor.foreground & UI foreground */
+  --text-primary: #f1f1e7;
+  --text-secondary: #c6c6bd;
+  --text-tertiary: #a5a59e;
+
+  /* Borders — tab.border, dropdown.border */
+  --border-primary: #4a0f37;
+  --border-secondary: #470f34;
+
+  /* Accent — focusBorder / textLink / button (orange) */
+  --accent-primary: #fa8d3e;
+  --accent-hover: #ffce6b;
+  --accent-light: rgba(250, 141, 62, 0.22);
+
+  /* Status — errorForeground, list.warning, list.highlight (teal) */
+  --success: #4cbf99;
+  --error: #f07171;
+  --warning: #ef7c2a;
+
+  /* Bold + italic — Ubuntu gold + lighter peach (cohesive with orange heading) */
+  --syntax-bold:   #ffce6b; /* warm gold */
+  --syntax-italic: #fdba74; /* lighter peach — same family as orange heading */
+
+  /* Shadows — widget.shadow */
+  --shadow-sm: 0 1px 2px 0 rgba(6, 1, 4, 0.55);
+  --shadow-md: 0 4px 6px -1px rgba(6, 1, 4, 0.6);
+  --shadow-lg: 0 10px 15px -3px rgba(6, 1, 4, 0.65);
+}

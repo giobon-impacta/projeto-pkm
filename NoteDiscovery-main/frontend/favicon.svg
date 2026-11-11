@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background circle with gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main circle background -->
+  <circle cx="50" cy="50" r="48" fill="url(#bgGradient)"/>
+  
+  <!-- Document/Note icon -->
+  <g transform="translate(50, 50)">
+    <!-- Paper -->
+    <rect x="-18" y="-22" width="36" height="44" rx="2" fill="white" opacity="0.95"/>
+    
+    <!-- Lines representing text -->
+    <line x1="-12" y1="-14" x2="12" y2="-14" stroke="#667eea" stroke-width="2" stroke-linecap="round"/>
+    <line x1="-12" y1="-6" x2="12" y2="-6" stroke="#667eea" stroke-width="2" stroke-linecap="round"/>
+    <line x1="-12" y1="2" x2="8" y2="2" stroke="#667eea" stroke-width="2" stroke-linecap="round"/>
+    
+    <!-- Pen/pencil icon overlay -->
+    <g transform="translate(8, 8) rotate(-45)">
+      <rect x="0" y="-1.5" width="12" height="3" fill="#f59e0b" rx="0.5"/>
+      <polygon points="12,1.5 14,0 12,-1.5" fill="#92400e"/>
+      <circle cx="3" cy="0" r="1" fill="#fbbf24"/>
+    </g>
+  </g>
+</svg>
+

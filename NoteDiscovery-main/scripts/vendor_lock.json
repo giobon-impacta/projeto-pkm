@@ -1,0 +1,70 @@
+{
+  "alpinejs": {
+    "version": "3.14.1",
+    "hashes": {
+      "cdn.min.js": "358d9afbb1ab5befa2f48061a30776e5bcd7707f410a606ba985f98bc3b1c034"
+    }
+  },
+  "dompurify": {
+    "version": "3.0.8",
+    "hashes": {
+      "purify.min.js": "d2469862adea8ad924559a4fffab8a4c9c1f4e9a8534ce8e1c36ec698cf0f54c"
+    }
+  },
+  "highlight.js": {
+    "version": "11.9.0",
+    "hashes": {
+      "highlight.min.js": "837a6fa5b0c736b52bbde2b2b6190f305da3fc9ed41681db5321507057b5c846",
+      "languages/bash.min.js": "fd9edcf3c6b2223b8987115f7799b1d1eec3000d045599cf4877c0f938ad8744",
+      "languages/csharp.min.js": "5f66788bffb4e1cd616a2e819e0d030a18fdccf3d18e8345fdda2cc3ce4658df",
+      "languages/css.min.js": "90b54d3bef2a9cc8c02f3a8d512fd317ab61fd3c4d9e80081a94c3021d2403e7",
+      "languages/http.min.js": "fc86f0ebfcf92f1ed6db4619b0996f58d4f00938295a786a7803d5fa1770bab1",
+      "languages/javascript.min.js": "8f675eb100c79498bd35f422f9b5d7c36a4b89c729d7e47715506190792bf9f0",
+      "languages/json.min.js": "815cece9ac14999f064762fa9667ef86c55a67f017f00ed49ca9cdcb8c738778",
+      "languages/powershell.min.js": "9812f1ea7bf1e4da7dcb4408cb46f3b5be3aa5bb46a01406b4092a9828a51275",
+      "languages/python.min.js": "d49d8b48c93478ccd989b41da48f5fec4b0d1ebd986b5b764d18f0508e51ff6e",
+      "languages/shell.min.js": "1797c7f57f02278c1d53c510db527f6b08ed433207d1ad5ebbae03cf795d9fea",
+      "languages/sql.min.js": "1d1e2b97b190a7e38232ece7b86be06729d0c3d80b877ad6a609b0cf8c9f936c",
+      "languages/typescript.min.js": "4de6a71f23f646641254c8563986ade9289d1df26043ff58c84938e71ea23387",
+      "languages/yaml.min.js": "7f836768f920dc70690285eaa721db74eb96037735706046b67a358e97db578d",
+      "styles/github-dark.min.css": "9f208d022102b1d0c7aebfecd8e42ca7997d5de636649d2b31ea63093d809019",
+      "styles/github.min.css": "3a9a5def8b9c311e5ae43abde85c63133185eed4f0d9f67fea4b00a8308cf066"
+    }
+  },
+  "marked": {
+    "version": "12.0.2",
+    "hashes": {
+      "marked.min.js": "15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894"
+    }
+  },
+  "mathjax": {
+    "version": "3.2.2",
+    "hashes": {
+      "tarball": "1b9c0a1c44df864e915690558e72adb9cc5203360daefd385084ced3b6c64c09"
+    }
+  },
+  "mermaid": {
+    "version": "11.12.2",
+    "hashes": {
+      "tarball": "c4ab1840638b1735135090c667382e89cc353b46b56761514a3d0a8a80963832"
+    }
+  },
+  "qrcode-generator": {
+    "version": "1.4.4",
+    "hashes": {
+      "qrcode.min.js": "bb2365e4902f4f84852cf4025e6f6a60325a682aeafa43fb63b7fc8f098d1ef2"
+    }
+  },
+  "tailwindcss": {
+    "version": "3.4.17",
+    "hashes": {
+      "tailwind.min.js": "176e894661aa9cdc9a5cba6c720044cbbf7b8bd80d1c9a142a7c24b1b6c50d15"
+    }
+  },
+  "vis-network": {
+    "version": "9.1.9",
+    "hashes": {
+      "vis-network.min.js": "f53f833ddb9bf97efe856bb0637d4fe88f39e39999c7e94a4b8afc8de8a1a2e5"
+    }
+  }
+}

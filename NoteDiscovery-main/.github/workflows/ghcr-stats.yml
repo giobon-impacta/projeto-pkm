@@ -1,0 +1,144 @@
+name: Update GHCR stats badge
+
+# Scrapes the "Total downloads" figure from the public GHCR package page and
+# publishes it as a shields.io-compatible endpoint JSON on the `stats` branch.
+# The README badge reads that JSON, so the pull count updates automatically
+# with no external dependency on third-party scrapers.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 6 * * *'  # Daily at 06:15 UTC (off-peak)
+
+# Needed to push to the stats branch with the default GITHUB_TOKEN.
+permissions:
+  contents: write
+
+# One run at a time. If a scheduled run overlaps a manual dispatch, wait
+# rather than racing on the stats branch.
+concurrency:
+  group: ghcr-stats
+  cancel-in-progress: false
+
+jobs:
+  update-stats:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scrape GHCR download count
+        id: scrape
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python3 <<'PY'
+          import json, os, re, sys, urllib.request
+
+          URL = "https://github.com/gamosoft/NoteDiscovery/pkgs/container/notediscovery"
+          req = urllib.request.Request(URL, headers={
+              "User-Agent": "notediscovery-stats/1.0 (+https://github.com/gamosoft/NoteDiscovery)"
+          })
+          try:
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  html = r.read().decode("utf-8", errors="replace")
+          except Exception as e:
+              print(f"::error::Failed to fetch GHCR page: {e}", file=sys.stderr)
+              sys.exit(1)
+
+          # The GHCR package sidebar renders as:
+          #   <span ...>Total downloads</span>
+          #   <h3 title="268441">268K</h3>
+          # The `title` attribute carries the exact count, the text content
+          # carries the abbreviated one. Primary pattern is strict about the
+          # tag boundary; fallback is lazier for markup drift resilience.
+          patterns = [
+              r'Total\s+downloads\s*</[^>]+>\s*<[^>]*title="(\d+)"[^>]*>\s*([^<]+?)\s*</',
+              r'Total\s+downloads.*?title="(\d+)"[^>]*>\s*([^<]+?)\s*</',
+          ]
+          raw_downloads = None
+          pretty_downloads = None
+          for pat in patterns:
+              m = re.search(pat, html, re.DOTALL | re.IGNORECASE)
+              if m:
+                  raw_downloads = int(m.group(1))
+                  pretty_downloads = m.group(2).strip()
+                  break
+
+          if raw_downloads is None:
+              print("::error::Could not locate 'Total downloads' in page HTML.", file=sys.stderr)
+              print("::group::First 2 KB of fetched HTML (for debugging)", file=sys.stderr)
+              print(html[:2048], file=sys.stderr)
+              print("::endgroup::", file=sys.stderr)
+              sys.exit(1)
+
+          # The abbreviated count is scraped text that later reaches a shell
+          # command and GITHUB_OUTPUT, so only accept the shape GitHub renders
+          # ("308K", "1.2M"). Anything else means the markup changed.
+          if not re.fullmatch(r"[\d.,]+[KMB]?", pretty_downloads):
+              print(f"::error::Unexpected download format: {pretty_downloads!r}", file=sys.stderr)
+              sys.exit(1)
+
+          print(f"Parsed downloads: raw={raw_downloads:,} pretty={pretty_downloads!r}")
+
+          # shields.io endpoint schema. See https://shields.io/badges/endpoint-badge
+          # `message` is what the badge shows; `raw_downloads` is ignored by
+          # shields but useful for downstream tools. Nothing here may vary
+          # between runs unless the count itself moved, otherwise the
+          # skip-commit check in the publish step below can never fire.
+          payload = {
+              "schemaVersion": 1,
+              "label": "ghcr pulls",
+              "message": pretty_downloads,
+              "color": "blue",
+              "cacheSeconds": 3600,
+              "raw_downloads": raw_downloads,
+          }
+
+          with open("out/ghcr.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f, indent=2)
+              f.write("\n")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"pretty={pretty_downloads}\n")
+              f.write(f"raw={raw_downloads}\n")
+          PY
+
+      - name: Publish to stats branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRETTY: ${{ steps.scrape.outputs.pretty }}
+          RAW: ${{ steps.scrape.outputs.raw }}
+        run: |
+          set -euo pipefail
+
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          STATS_DIR="$(mktemp -d)"
+
+          # Clone the stats branch if it exists, otherwise bootstrap it as an
+          # orphan branch so its history stays independent of main.
+          if git ls-remote --exit-code --heads "$REMOTE" stats >/dev/null 2>&1; then
+              echo "stats branch exists — cloning."
+              git clone --branch stats --depth 1 "$REMOTE" "$STATS_DIR"
+          else
+              echo "stats branch does not exist yet — bootstrapping as orphan."
+              git clone --depth 1 "$REMOTE" "$STATS_DIR"
+              (
+                  cd "$STATS_DIR"
+                  git checkout --orphan stats
+                  git rm -rf . >/dev/null 2>&1 || true
+              )
+          fi
+
+          cp out/ghcr.json "$STATS_DIR/ghcr.json"
+
+          (
+              cd "$STATS_DIR"
+              git add ghcr.json
+              if git diff --cached --quiet; then
+                  echo "No change in scraped count — skipping commit."
+                  exit 0
+              fi
+              git commit -m "chore(stats): update GHCR pull count to ${PRETTY} (${RAW}) [skip ci]"
+              git push origin stats
+          )

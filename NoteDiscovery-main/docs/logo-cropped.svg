@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 30 120 140">
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color: rgb(102, 126, 234); stop-opacity: 1; --darkreader-inline-stopcolor: var(--darkreader-text-667eea, #67a0ea);" data-darkreader-inline-stopcolor=""/>
+      <stop offset="100%" style="stop-color: rgb(118, 75, 162); stop-opacity: 1; --darkreader-inline-stopcolor: var(--darkreader-text-764ba2, #926bba);" data-darkreader-inline-stopcolor=""/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Main document shape -->
+  <rect x="40" y="30" width="120" height="140" rx="8" fill="url(#logoGradient)"/>
+  
+  <!-- Paper fold effect at top right -->
+  <path d="M 140 30 L 140 50 L 160 50 Z" fill="#5568d3" data-darkreader-inline-fill="" style="--darkreader-inline-fill: var(--darkreader-text-5568d3, #5f91d6);"/>
+  
+  <!-- Lines representing text on the document -->
+  <line x1="60" y1="70" x2="140" y2="70" stroke="white" stroke-width="4" stroke-linecap="round" opacity="0.9" data-darkreader-inline-stroke="" style="--darkreader-inline-stroke: var(--darkreader-border-ffffff, #303436);"/>
+  <line x1="60" y1="90" x2="140" y2="90" stroke="white" stroke-width="4" stroke-linecap="round" opacity="0.9" data-darkreader-inline-stroke="" style="--darkreader-inline-stroke: var(--darkreader-border-ffffff, #303436);"/>
+  <line x1="60" y1="110" x2="120" y2="110" stroke="white" stroke-width="4" stroke-linecap="round" opacity="0.9" data-darkreader-inline-stroke="" style="--darkreader-inline-stroke: var(--darkreader-border-ffffff, #303436);"/>
+  
+  <!-- Discovery symbol - a magnifying glass -->
+  <g transform="translate(100, 135)">
+    <circle cx="0" cy="0" r="18" fill="none" stroke="white" stroke-width="4" data-darkreader-inline-stroke="" style="--darkreader-inline-stroke: var(--darkreader-text-ffffff, #e8e6e3);"/>
+    <line x1="13" y1="13" x2="25" y2="25" stroke="white" stroke-width="4" stroke-linecap="round" data-darkreader-inline-stroke="" style="--darkreader-inline-stroke: var(--darkreader-border-ffffff, #303436);"/>
+    <circle cx="0" cy="0" r="10" fill="white" opacity="0.3" data-darkreader-inline-fill="" style="--darkreader-inline-fill: var(--darkreader-text-ffffff, #e8e6e3);"/>
+  </g>
+</svg>

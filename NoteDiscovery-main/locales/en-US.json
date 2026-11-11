@@ -1,0 +1,345 @@
+{
+  "_meta": {
+    "code": "en-US",
+    "name": "English",
+    "flag": "🇺🇸"
+  },
+  "app": {
+    "tagline": "Your Self-Hosted Knowledge Base"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "rename": "Rename",
+    "create": "Create",
+    "close": "Close",
+    "confirm_title": "Confirm",
+    "yes": "✓ Yes",
+    "no": "✗ No",
+    "ok": "OK",
+    "error": "Error",
+    "loading": "Loading...",
+    "saved": "✓ Saved",
+    "saving": "Saving...",
+    "copied": "Copied!",
+    "copy_to_clipboard": "Copy to clipboard",
+    "failed": "Failed to {{action}}. Please try again."
+  },
+  "toast": {
+    "region_label": "Notifications",
+    "dismiss": "Dismiss"
+  },
+  "sidebar": {
+    "title": "FILES",
+    "favorites_title": "Favorites",
+    "folders_and_notes": "Folders & Notes",
+    "new_button": "+ New",
+    "new_note": "New Note",
+    "new_folder": "New Folder",
+    "new_from_template": "New from Template",
+    "new_drawing": "New Drawing",
+    "rename_folder": "Rename folder",
+    "delete_folder": "Delete folder",
+    "search_placeholder": "Search notes...",
+    "search_hint": "Type to search your notes",
+    "clear_search": "Clear search",
+    "drag_hint": "💡 Drag=Move",
+    "root_folder": "📂 Root folder",
+    "no_notes": "No notes yet. Create your first note!",
+    "no_notes_yet": "No notes or folders yet.",
+    "create_first": "Create your first note or folder!",
+    "loading_notes": "Loading your notes…",
+    "no_favorites": "No favorites yet",
+    "no_results": "No results found",
+    "expand_all": "Expand all folders",
+    "collapse_all": "Collapse all folders",
+    "sort_a-z": "Sort A to Z",
+    "sort_z-a": "Sort Z to A",
+    "sort_newest": "Sort by newest (files only)",
+    "sort_oldest": "Sort by oldest (files only)",
+    "sort_largest": "Sort by largest (files only)",
+    "sort_smallest": "Sort by smallest (files only)",
+    "toggle_sidebar": "Toggle sidebar",
+    "go_to_homepage": "Go to homepage",
+    "hide_panel": "Hide sidebar panel",
+    "show_panel": "Show sidebar panel",
+    "files": "Files",
+    "search": "Search",
+    "search_title": "SEARCH",
+    "settings": "Settings",
+    "settings_title": "SETTINGS",
+    "filtered_notes": "Filtered Notes"
+  },
+  "editor": {
+    "placeholder": "Start writing in markdown...",
+    "drop_hint": "💡 Drop here to insert at cursor position...",
+    "mode_edit": "Edit",
+    "mode_split": "Split",
+    "mode_preview": "Preview",
+    "edited": "Edited {{time}}",
+    "just_now": "just now",
+    "minutes_ago": "{{count}}m ago",
+    "hours_ago": "{{count}}h ago",
+    "days_ago": "{{count}}d ago",
+    "tasks_all_checked": "{{changed}} of {{total}} tasks checked",
+    "tasks_all_unchecked": "{{changed}} of {{total}} tasks unchecked"
+  },
+  "notes": {
+    "confirm_delete": "Delete \"{{name}}\"?",
+    "already_exists": "A note named \"{{name}}\" already exists in this location.\nPlease choose a different name.",
+    "prompt_name": "Enter note name:",
+    "input_placeholder": "Note name",
+    "prompt_name_in_folder": "Create note in \"{{folder}}\".",
+    "prompt_name_with_path": "You can use folder/name to put the note inside nested folders.",
+    "prompt_rename": "Enter new name:",
+    "invalid_name": "Invalid note name.",
+    "empty_name": "Note name cannot be empty.",
+    "not_found": "Note not found: {{path}}",
+    "create_from_link": "Note \"{{path}}\" doesn't exist.\n\nWould you like to create it?",
+    "no_content": "No note content to export",
+    "open_first": "Please open a note first before uploading images.",
+    "save_conflict_title": "Note changed elsewhere",
+    "save_conflict_message": "\"{{name}}\" changed on disk since you opened it: another tab, a sync tool or an AI agent wrote to it.\n\nReload shows the version on disk; your unsaved changes are discarded.\nOverwrite saves your version in place of theirs.",
+    "save_conflict_overwrite": "Overwrite",
+    "save_conflict_reload": "Reload",
+    "save_conflict_unsaved": "\"{{name}}\": your last changes were not saved, the note changed elsewhere."
+  },
+  "folders": {
+    "confirm_delete": "⚠️ WARNING ⚠️\n\nAre you sure you want to delete the folder \"{{name}}\"?\n\nThis will PERMANENTLY delete:\n• All notes inside this folder\n• All subfolders and their contents\n\nThis action CANNOT be undone!",
+    "already_exists": "A folder named \"{{name}}\" already exists in this location.\nPlease choose a different name.",
+    "prompt_name": "Enter folder name:",
+    "folder_name": "Folder Name",
+    "input_placeholder": "Folder name",
+    "prompt_name_in_folder": "Create subfolder in \"{{folder}}\".",
+    "prompt_name_with_path": "Use slashes in the path to nest folders (e.g. \"Projects\" or \"Work/2025\").",
+    "prompt_rename": "Rename folder \"{{name}}\" to:",
+    "rename_modal_title": "Rename folder",
+    "rename_modal_description": "Enter the new name for the folder \"{{name}}\".",
+    "rename_modal_label": "New name",
+    "invalid_name": "Invalid folder name.",
+    "cannot_move_into_self": "Cannot move folder into itself or its subfolder.",
+    "empty": "empty"
+  },
+  "toolbar": {
+    "undo": "Undo (Ctrl+Z)",
+    "redo": "Redo (Ctrl+Y)",
+    "delete_note": "Delete note",
+    "delete_image": "Delete image",
+    "delete_drawing": "Delete drawing",
+    "export_html": "Export as HTML",
+    "print_preview": "Print preview",
+    "copy_link": "Copy link to clipboard",
+    "add_favorite": "Add to favorites",
+    "remove_favorite": "Remove from favorites"
+  },
+  "zen_mode": {
+    "title": "Zen Mode",
+    "tooltip": "Zen Mode (Ctrl+Alt+Z)",
+    "exit": "Exit Zen Mode",
+    "exit_hint": "Exit Zen Mode (Esc)"
+  },
+  "share": {
+    "button_tooltip": "Share note",
+    "modal_title": "Share Note",
+    "not_shared_description": "This note is not currently shared. Create a link to share it with anyone.",
+    "shared_description": "Anyone with this link can view this note:",
+    "create_link": "Create Share Link",
+    "copy": "Copy",
+    "stop_sharing": "Stop Sharing",
+    "confirm_revoke": "Are you sure you want to stop sharing this note? The share link will no longer work.",
+    "error_creating": "Failed to create share link: {{error}}",
+    "error_revoking": "Failed to revoke share link: {{error}}",
+    "show_qr": "Show QR Code",
+    "hide_qr": "Hide QR Code",
+    "panel_title": "Shared",
+    "no_shared": "No shared notes",
+    "link_name": "Link name",
+    "use_random_link": "Use a random link",
+    "custom_link_warning": "Anyone who guesses the name can open the note. Use a random link for anything sensitive.",
+    "slug_available": "Name is available",
+    "slug_taken": "Another link already uses this name",
+    "slug_invalid_chars": "Use letters, numbers, hyphens and underscores only",
+    "slug_too_short": "Use at least {{min}} characters",
+    "slug_too_long": "Use at most {{max}} characters",
+    "update_link": "Update Link",
+    "link_not_saved": "not saved yet",
+    "confirm_slug_change": "Change the link name? The current share link will stop working immediately.",
+    "error_updating": "Failed to update share link: {{error}}"
+  },
+  "quick_switcher": {
+    "placeholder": "Type to search notes...",
+    "no_results": "No matching notes",
+    "recent_hint": "Showing recent notes. Type to search all.",
+    "navigate": "navigate",
+    "open": "open",
+    "close": "close"
+  },
+  "tags": {
+    "title": "Tags",
+    "no_tags": "No tags found",
+    "hint": "Add tags using YAML frontmatter",
+    "no_matches": "No notes match selected tags",
+    "clear_all": "Clear tag filters",
+    "filter_by": "Filter by {{tag}} ({{count}} notes)"
+  },
+  "outline": {
+    "title": "Outline",
+    "no_headings": "No headings found",
+    "hint": "Add headings using # syntax"
+  },
+  "backlinks": {
+    "title": "Backlinks",
+    "no_backlinks": "No backlinks found",
+    "hint": "Other notes will appear here when they link to this note",
+    "select_note": "Select a note to see backlinks",
+    "more_refs": "more"
+  },
+  "stats": {
+    "words": "words",
+    "reading_time": "~{{minutes}}m read",
+    "links": "{{count}} links",
+    "click_details": "▼ Click for details"
+  },
+  "graph": {
+    "title": "Graph View",
+    "empty": "No connections to display",
+    "markdown_links": "Markdown links",
+    "click_hint": "Click: select • Double-click: open"
+  },
+  "templates": {
+    "title": "Templates",
+    "select": "Select a template...",
+    "prompt_name": "Enter note name:",
+    "no_templates": "No templates found. Create templates in the _templates folder.",
+    "create_failed": "Failed to create note from template",
+    "create_from_template": "Create from Template",
+    "select_template": "Select Template",
+    "choose_template": "Choose a template",
+    "note_name": "Note Name",
+    "available_placeholders": "Available placeholders",
+    "create_note": "Create Note"
+  },
+  "export": {
+    "failed": "Failed to export HTML: {{error}}"
+  },
+  "login": {
+    "title": "Login",
+    "tagline": "Your Self-Hosted Knowledge Base",
+    "password_placeholder": "Enter your password",
+    "unlock_button": "🔓 Unlock",
+    "footer": "🔒 Secure & Self-Hosted",
+    "error_incorrect_password": "Incorrect password. Please try again."
+  },
+  "drawing": {
+    "tool_freehand": "Pencil — freehand drawing",
+    "tool_line": "Straight line",
+    "tool_rect": "Rectangle",
+    "tool_ellipse": "Circle",
+    "color": "Color",
+    "width": "Stroke width",
+    "tool_eraser": "Eraser (paints with background color)",
+    "tool_eyedropper": "Eyedropper — pick a color from the canvas",
+    "tool_fill": "Paint bucket — fill connected area with color",
+    "tool_text": "Text — click on the canvas to type",
+    "clear": "Clear",
+    "clear_hint": "Replace with a blank image",
+    "clear_title": "Replace with a blank canvas?",
+    "clear_confirm": "The saved PNG and all strokes in this session will be replaced with a blank white image. You cannot undo this."
+  },
+  "media": {
+    "confirm_delete": "Delete \"{{name}}\"?",
+    "upload_failed": "Failed to upload file",
+    "no_valid_files": "No valid files found. Supported: {{formats}}"
+  },
+  "move": {
+    "failed_note": "Failed to move note.",
+    "failed_folder": "Failed to move folder.",
+    "failed_media": "Failed to move media file."
+  },
+  "search": {
+    "previous": "Previous (Shift+F3)",
+    "next": "Next (F3)",
+    "matches": "{{current}} of {{total}}",
+    "match_of": "Match {{current}} of {{total}}",
+    "result_singular": "result",
+    "result_plural": "results",
+    "no_results": "No notes contain \"{{query}}\"",
+    "searching": "Searching for \"{{query}}\"..."
+  },
+  "theme": {
+    "title": "Theme"
+  },
+  "language": {
+    "title": "Language"
+  },
+  "syntax_highlight": {
+    "title": "Editor Syntax Highlight",
+    "description": "Colorize markdown syntax in editor",
+    "enable": "Enable syntax highlighting",
+    "disable": "Disable syntax highlighting"
+  },
+  "settings": {
+    "account": "Account",
+    "logout": "Logout",
+    "readable_line_length": "Readable line length",
+    "readable_line_length_desc": "Limit preview width for easier reading",
+    "hide_underscore_folders": "Hide system folders",
+    "hide_underscore_folders_desc": "Hide _attachments, _templates and other underscore folders from the sidebar and the graph",
+    "tab_inserts_tab": "Tab key inserts tab",
+    "tab_inserts_tab_desc": "Press Tab to insert a tab character instead of changing focus",
+    "new_button_action": "When you click +",
+    "new_button_action_desc": "Shift+click always shows the chooser.",
+    "new_button_option_chooser": "Show chooser (default)",
+    "new_button_option_note": "New note",
+    "new_button_option_folder": "New folder",
+    "new_button_option_template": "New note from template",
+    "new_button_option_drawing": "New drawing",
+    "auto_fill_note_title": "Auto-fill title with timestamp",
+    "auto_fill_note_title_desc": "yyyymmddHHMMSS. Enter to accept, type to replace."
+  },
+  "homepage": {
+    "title": "Home",
+    "welcome": "Welcome to NoteDiscovery",
+    "get_started": "Create something to get started",
+    "no_notes_title": "No notes yet",
+    "no_notes_desc": "Create your first note or folder",
+    "folder_empty": "This folder is empty",
+    "note_singular": "note",
+    "note_plural": "notes",
+    "folder_singular": "folder",
+    "folder_plural": "folders",
+    "view_cards": "Card view",
+    "view_list": "List view"
+  },
+  "format": {
+    "bold": "Bold",
+    "italic": "Italic",
+    "strikethrough": "Strikethrough",
+    "heading": "Heading",
+    "link": "Link",
+    "image": "Image",
+    "code": "Inline code",
+    "codeblock": "Code block",
+    "quote": "Quote",
+    "bullet_list": "Bullet list",
+    "numbered_list": "Numbered list",
+    "checkbox": "Checkbox",
+    "table": "Table"
+  },
+  "validation": {
+    "forbidden_chars": "Name contains forbidden characters: {{chars}}",
+    "reserved_name": "This name is reserved by the operating system.",
+    "invalid_dot": "Name cannot be just a dot.",
+    "trailing_dot_space": "Name cannot end with a dot or space."
+  },
+  "support": {
+    "enjoying_demo": "Support this project",
+    "deploy_own": "Deploy your own instance",
+    "thank_you": "Thank you for your support! 💚"
+  },
+  "demo": {
+    "title": "DEMO MODE",
+    "warning": "Contents reset daily. Changes may be overwritten by other users."
+  }
+}

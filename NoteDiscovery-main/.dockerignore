@@ -1,0 +1,23 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+.git
+.gitignore
+.env
+.venv
+venv
+README.md
+.DS_Store
+data/
+*.log
+
+# Downloaded fresh in the vendor build stage
+frontend/vendor/
+

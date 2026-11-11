@@ -1,0 +1,345 @@
+{
+  "_meta": {
+    "code": "ja-JP",
+    "name": "日本語",
+    "flag": "🇯🇵"
+  },
+  "app": {
+    "tagline": "セルフホスト型ナレッジベース"
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "rename": "名前変更",
+    "create": "作成",
+    "close": "閉じる",
+    "confirm_title": "確認",
+    "yes": "✓ はい",
+    "no": "✗ いいえ",
+    "ok": "OK",
+    "error": "エラー",
+    "loading": "読み込み中...",
+    "saved": "✓ 保存済み",
+    "saving": "保存中...",
+    "copied": "コピーしました！",
+    "copy_to_clipboard": "クリップボードにコピー",
+    "failed": "{{action}}に失敗しました。もう一度お試しください。"
+  },
+  "toast": {
+    "region_label": "通知",
+    "dismiss": "閉じる"
+  },
+  "sidebar": {
+    "title": "ファイル",
+    "favorites_title": "お気に入り",
+    "folders_and_notes": "フォルダとノート",
+    "new_button": "+ 新規",
+    "new_note": "新規ノート",
+    "new_folder": "新規フォルダ",
+    "new_from_template": "テンプレートから作成",
+    "new_drawing": "新規お絵かき",
+    "rename_folder": "フォルダの名前を変更",
+    "delete_folder": "フォルダを削除",
+    "search_placeholder": "ノートを検索...",
+    "search_hint": "ノートを検索",
+    "clear_search": "検索をクリア",
+    "drag_hint": "💡 ドラッグで移動",
+    "root_folder": "📂 ルートフォルダ",
+    "no_notes": "ノートがありません。最初のノートを作成しましょう！",
+    "no_notes_yet": "ノートやフォルダがありません。",
+    "create_first": "最初のノートまたはフォルダを作成しましょう！",
+    "loading_notes": "ノートを読み込み中…",
+    "no_favorites": "お気に入りがありません",
+    "no_results": "結果が見つかりません",
+    "expand_all": "すべて展開",
+    "collapse_all": "すべて折りたたむ",
+    "sort_a-z": "A-Z順",
+    "sort_z-a": "Z-A順",
+    "sort_newest": "新しい順（ファイルのみ）",
+    "sort_oldest": "古い順（ファイルのみ）",
+    "sort_largest": "大きい順（ファイルのみ）",
+    "sort_smallest": "小さい順（ファイルのみ）",
+    "toggle_sidebar": "サイドバー切替",
+    "go_to_homepage": "ホームへ",
+    "hide_panel": "サイドバーを非表示",
+    "show_panel": "サイドバーを表示",
+    "files": "ファイル",
+    "search": "検索",
+    "search_title": "検索",
+    "settings": "設定",
+    "settings_title": "設定",
+    "filtered_notes": "フィルター済みノート"
+  },
+  "editor": {
+    "placeholder": "マークダウンで書き始める...",
+    "drop_hint": "💡 ここにドロップしてカーソル位置に挿入...",
+    "mode_edit": "編集",
+    "mode_split": "分割",
+    "mode_preview": "プレビュー",
+    "edited": "{{time}}に編集",
+    "just_now": "たった今",
+    "minutes_ago": "{{count}}分前",
+    "hours_ago": "{{count}}時間前",
+    "days_ago": "{{count}}日前",
+    "tasks_all_checked": "{{total}} 件中 {{changed}} 件のタスクをチェックしました",
+    "tasks_all_unchecked": "{{total}} 件中 {{changed}} 件のタスクのチェックを解除しました"
+  },
+  "notes": {
+    "confirm_delete": "「{{name}}」を削除しますか？",
+    "already_exists": "「{{name}}」という名前のノートは既に存在します。\n別の名前を選択してください。",
+    "prompt_name": "ノート名を入力:",
+    "input_placeholder": "ノート名",
+    "prompt_name_in_folder": "「{{folder}}」にノートを作成します。",
+    "prompt_name_with_path": "フォルダ/名前の形式で、入れ子のフォルダにノートを置けます。",
+    "prompt_rename": "新しい名前を入力:",
+    "invalid_name": "無効なノート名です。",
+    "empty_name": "ノート名は空にできません。",
+    "not_found": "ノートが見つかりません: {{path}}",
+    "create_from_link": "ノート「{{path}}」は存在しません。\n\n作成しますか？",
+    "no_content": "エクスポートするノートの内容がありません",
+    "open_first": "画像をアップロードする前にノートを開いてください。",
+    "save_conflict_title": "ノートが別の場所で変更されました",
+    "save_conflict_message": "「{{name}}」は開いた後にディスク上で変更されました（別のタブ、同期ツール、または AI エージェントによる書き込み）。\n\n「再読み込み」はディスク上のバージョンを表示します。未保存の変更は破棄されます。\n「上書き」はあなたのバージョンで置き換えて保存します。",
+    "save_conflict_overwrite": "上書き",
+    "save_conflict_reload": "再読み込み",
+    "save_conflict_unsaved": "「{{name}}」：最後の変更は保存されませんでした。ノートが別の場所で変更されています。"
+  },
+  "folders": {
+    "confirm_delete": "⚠️ 警告 ⚠️\n\n本当にフォルダ「{{name}}」を削除しますか？\n\n以下が完全に削除されます:\n• このフォルダ内のすべてのノート\n• すべてのサブフォルダとその内容\n\nこの操作は元に戻せません！",
+    "already_exists": "「{{name}}」という名前のフォルダは既に存在します。\n別の名前を選択してください。",
+    "prompt_name": "フォルダ名を入力:",
+    "folder_name": "フォルダ名",
+    "input_placeholder": "フォルダ名",
+    "prompt_name_in_folder": "「{{folder}}」にサブフォルダを作成します。",
+    "prompt_name_with_path": "スラッシュで階層フォルダを作成できます（例：「プロジェクト」「仕事/2025」）。",
+    "prompt_rename": "フォルダ「{{name}}」の新しい名前:",
+    "rename_modal_title": "フォルダの名前を変更",
+    "rename_modal_description": "フォルダ「{{name}}」の新しい名前を入力してください。",
+    "rename_modal_label": "新しい名前",
+    "invalid_name": "無効なフォルダ名です。",
+    "cannot_move_into_self": "フォルダを自身またはそのサブフォルダに移動できません。",
+    "empty": "空"
+  },
+  "toolbar": {
+    "undo": "元に戻す (Ctrl+Z)",
+    "redo": "やり直す (Ctrl+Y)",
+    "delete_note": "ノートを削除",
+    "delete_image": "画像を削除",
+    "delete_drawing": "お絵かきを削除",
+    "export_html": "HTMLとしてエクスポート",
+    "print_preview": "印刷プレビュー",
+    "copy_link": "リンクをクリップボードにコピー",
+    "add_favorite": "お気に入りに追加",
+    "remove_favorite": "お気に入りから削除"
+  },
+  "zen_mode": {
+    "title": "集中モード",
+    "tooltip": "集中モード (Ctrl+Alt+Z)",
+    "exit": "集中モードを終了",
+    "exit_hint": "集中モードを終了 (Esc)"
+  },
+  "share": {
+    "button_tooltip": "ノートを共有",
+    "modal_title": "ノートを共有",
+    "not_shared_description": "このノートは現在共有されていません。リンクを作成して誰とでも共有できます。",
+    "shared_description": "このリンクを持っている人は誰でもこのノートを閲覧できます：",
+    "create_link": "共有リンクを作成",
+    "copy": "コピー",
+    "stop_sharing": "共有を停止",
+    "confirm_revoke": "このノートの共有を停止してもよろしいですか？共有リンクは機能しなくなります。",
+    "error_creating": "共有リンクの作成に失敗しました: {{error}}",
+    "error_revoking": "共有リンクの取り消しに失敗しました: {{error}}",
+    "show_qr": "QRコードを表示",
+    "hide_qr": "QRコードを非表示",
+    "panel_title": "共有",
+    "no_shared": "共有中のノートはありません",
+    "link_name": "リンク名",
+    "use_random_link": "ランダムなリンクを使う",
+    "custom_link_warning": "名前を推測できれば誰でもノートを開けます。重要な内容にはランダムなリンクを使ってください。",
+    "slug_available": "この名前は使用できます",
+    "slug_taken": "この名前は別のリンクで使用中です",
+    "slug_invalid_chars": "使用できるのは英数字、ハイフン、アンダースコアのみです",
+    "slug_too_short": "{{min}} 文字以上で入力してください",
+    "slug_too_long": "{{max}} 文字以内で入力してください",
+    "update_link": "リンクを更新",
+    "link_not_saved": "未保存",
+    "confirm_slug_change": "リンク名を変更してもよろしいですか？現在の共有リンクはすぐに使えなくなります。",
+    "error_updating": "共有リンクの更新に失敗しました: {{error}}"
+  },
+  "quick_switcher": {
+    "placeholder": "ノートを検索...",
+    "no_results": "結果なし",
+    "recent_hint": "最近のノートを表示中。入力して全て検索。",
+    "navigate": "移動",
+    "open": "開く",
+    "close": "閉じる"
+  },
+  "tags": {
+    "title": "タグ",
+    "no_tags": "タグが見つかりません",
+    "hint": "YAMLフロントマターでタグを追加",
+    "no_matches": "選択したタグに一致するノートがありません",
+    "clear_all": "タグフィルターをクリア",
+    "filter_by": "{{tag}}でフィルター（{{count}}件）"
+  },
+  "outline": {
+    "title": "アウトライン",
+    "no_headings": "見出しが見つかりません",
+    "hint": "# 記法で見出しを追加"
+  },
+  "backlinks": {
+    "title": "バックリンク",
+    "no_backlinks": "バックリンクが見つかりません",
+    "hint": "他のノートがこのノートにリンクすると、ここに表示されます",
+    "select_note": "バックリンクを表示するノートを選択",
+    "more_refs": "その他"
+  },
+  "stats": {
+    "words": "語",
+    "reading_time": "約{{minutes}}分で読了",
+    "links": "{{count}}件のリンク",
+    "click_details": "▼ 詳細を表示"
+  },
+  "graph": {
+    "title": "グラフ",
+    "empty": "表示する接続がありません",
+    "markdown_links": "マークダウンリンク",
+    "click_hint": "クリック: 選択 • ダブルクリック: 開く"
+  },
+  "templates": {
+    "title": "テンプレート",
+    "select": "テンプレートを選択...",
+    "prompt_name": "ノート名を入力:",
+    "no_templates": "テンプレートが見つかりません。_templatesフォルダにテンプレートを作成してください。",
+    "create_failed": "テンプレートからのノート作成に失敗しました",
+    "create_from_template": "テンプレートから作成",
+    "select_template": "テンプレートを選択",
+    "choose_template": "テンプレートを選択",
+    "note_name": "ノート名",
+    "available_placeholders": "利用可能なプレースホルダー",
+    "create_note": "ノートを作成"
+  },
+  "export": {
+    "failed": "HTMLエクスポートに失敗しました: {{error}}"
+  },
+  "login": {
+    "title": "ログイン",
+    "tagline": "セルフホスト型ナレッジベース",
+    "password_placeholder": "パスワードを入力",
+    "unlock_button": "🔓 ロック解除",
+    "footer": "🔒 安全なセルフホスト",
+    "error_incorrect_password": "パスワードが正しくありません。もう一度お試しください。"
+  },
+  "drawing": {
+    "tool_freehand": "鉛筆（フリーハンド）",
+    "tool_line": "直線",
+    "tool_rect": "長方形",
+    "tool_ellipse": "円",
+    "color": "色",
+    "width": "線の太さ",
+    "tool_eraser": "消しゴム（背景色で塗る）",
+    "tool_eyedropper": "スポイト — キャンバスから色を取得",
+    "tool_fill": "塗りつぶし — つながった領域を色で塗りつぶす",
+    "tool_text": "テキスト — キャンバスをクリックして入力",
+    "clear": "クリア",
+    "clear_hint": "白紙の画像に置き換え",
+    "clear_title": "白紙のキャンバスに置き換えますか？",
+    "clear_confirm": "保存済みのPNGとこの作業中の線は、白い空白画像に置き換えられます。元に戻せません。"
+  },
+  "media": {
+    "confirm_delete": "「{{name}}」を削除しますか？",
+    "upload_failed": "ファイルのアップロードに失敗しました",
+    "no_valid_files": "有効なファイルが見つかりません。対応: {{formats}}"
+  },
+  "move": {
+    "failed_note": "ノートの移動に失敗しました。",
+    "failed_folder": "フォルダの移動に失敗しました。",
+    "failed_media": "メディアファイルの移動に失敗しました。"
+  },
+  "search": {
+    "previous": "前へ (Shift+F3)",
+    "next": "次へ (F3)",
+    "matches": "{{current}} / {{total}}",
+    "match_of": "{{total}}件中{{current}}件目",
+    "result_singular": "件",
+    "result_plural": "件",
+    "no_results": "「{{query}}」を含むノートはありません",
+    "searching": "「{{query}}」を検索中..."
+  },
+  "theme": {
+    "title": "テーマ"
+  },
+  "language": {
+    "title": "言語"
+  },
+  "syntax_highlight": {
+    "title": "エディタのシンタックスハイライト",
+    "description": "エディタでマークダウン構文を色分け表示",
+    "enable": "シンタックスハイライトを有効化",
+    "disable": "シンタックスハイライトを無効化"
+  },
+  "settings": {
+    "account": "アカウント",
+    "logout": "ログアウト",
+    "readable_line_length": "読みやすい行幅",
+    "readable_line_length_desc": "プレビューの幅を制限して読みやすくする",
+    "hide_underscore_folders": "システムフォルダを非表示",
+    "hide_underscore_folders_desc": "_attachments、_templatesなどのフォルダをサイドバーとグラフから非表示",
+    "tab_inserts_tab": "Tabキーでタブを挿入",
+    "tab_inserts_tab_desc": "Tabキーでフォーカス移動ではなくタブ文字を挿入",
+    "new_button_action": "+ をクリックしたとき",
+    "new_button_action_desc": "Shift+クリックで常にセレクタが開きます。",
+    "new_button_option_chooser": "セレクタを表示（デフォルト）",
+    "new_button_option_note": "新規ノート",
+    "new_button_option_folder": "新規フォルダ",
+    "new_button_option_template": "テンプレートから新規ノート",
+    "new_button_option_drawing": "新規お絵描き",
+    "auto_fill_note_title": "タイトルに日時を自動入力",
+    "auto_fill_note_title_desc": "yyyymmddHHMMSS。Enterで確定、入力で置換。"
+  },
+  "homepage": {
+    "title": "ホーム",
+    "welcome": "NoteDiscoveryへようこそ",
+    "get_started": "何かを作成して始めましょう",
+    "no_notes_title": "ノートがありません",
+    "no_notes_desc": "最初のノートまたはフォルダを作成",
+    "folder_empty": "このフォルダは空です",
+    "note_singular": "ノート",
+    "note_plural": "ノート",
+    "folder_singular": "フォルダ",
+    "folder_plural": "フォルダ",
+    "view_cards": "カード表示",
+    "view_list": "リスト表示"
+  },
+  "format": {
+    "bold": "太字",
+    "italic": "斜体",
+    "strikethrough": "取り消し線",
+    "heading": "見出し",
+    "link": "リンク",
+    "image": "画像",
+    "code": "インラインコード",
+    "codeblock": "コードブロック",
+    "quote": "引用",
+    "bullet_list": "箇条書き",
+    "numbered_list": "番号付きリスト",
+    "checkbox": "チェックボックス",
+    "table": "表"
+  },
+  "validation": {
+    "forbidden_chars": "名前に使用できない文字が含まれています: {{chars}}",
+    "reserved_name": "この名前はオペレーティングシステムで予約されています。",
+    "invalid_dot": "名前をドットだけにすることはできません。",
+    "trailing_dot_space": "名前の末尾にドットやスペースは使用できません。"
+  },
+  "support": {
+    "enjoying_demo": "このプロジェクトを支援",
+    "deploy_own": "自分のインスタンスをデプロイ",
+    "thank_you": "ご支援ありがとうございます！💚"
+  },
+  "demo": {
+    "title": "デモモード",
+    "warning": "コンテンツは毎日リセットされます。変更は他のユーザーによって上書きされる場合があります。"
+  }
+}

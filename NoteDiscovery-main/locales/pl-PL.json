@@ -1,0 +1,345 @@
+{
+  "_meta": {
+    "code": "pl-PL",
+    "name": "Polski",
+    "flag": "🇵🇱"
+  },
+  "app": {
+    "tagline": "Baza Wiedzy na Twoim serwerze!"
+  },
+  "common": {
+    "save": "Zapisz",
+    "cancel": "Anuluj",
+    "delete": "Usuń",
+    "rename": "Zmień nazwę",
+    "create": "Stwórz",
+    "close": "Zamknij",
+    "confirm_title": "Potwierdź",
+    "yes": "✓ Tak",
+    "no": "✗ Nie",
+    "ok": "OK",
+    "error": "Błąd",
+    "loading": "Wczytuję...",
+    "saved": "✓ Zapisane",
+    "saving": "Zapisuję...",
+    "copied": "Skopiowane!",
+    "copy_to_clipboard": "Skopiuj do schowka",
+    "failed": "Nie udało się: {{action}}. Spróbuj jeszcze raz."
+  },
+  "toast": {
+    "region_label": "Powiadomienia",
+    "dismiss": "Odrzuć"
+  },
+  "sidebar": {
+    "title": "PLIKI",
+    "favorites_title": "Ulubione",
+    "folders_and_notes": "Foldery i notatki",
+    "new_button": "+ Nowe",
+    "new_note": "Nowa notatka",
+    "new_folder": "Nowy folder",
+    "new_from_template": "Nowe z szablonu",
+    "new_drawing": "Nowy szkic",
+    "rename_folder": "Zmień nazwę folderu",
+    "delete_folder": "Usuń folder",
+    "search_placeholder": "Szukaj notatek...",
+    "search_hint": "Wpisz coś by wyszukać notatki",
+    "clear_search": "Wyczyść wyszukiwanie",
+    "drag_hint": "💡 Przeciągnij=Przenieś",
+    "root_folder": "📂 Root folder",
+    "no_notes": "Brak notatek. Stwórz swoją pierwszą notatkę!",
+    "no_notes_yet": "Nie ma jeszcze żadnych notatek ani folderów.",
+    "create_first": "Stwórz swoją pierwszą notatkę lub folder!",
+    "loading_notes": "Wczytuję Twoje notatki…",
+    "no_favorites": "Brak ulubionych",
+    "no_results": "Nic nie znaleziono",
+    "expand_all": "Rozwiń foldery",
+    "collapse_all": "Zwiń foldery",
+    "sort_a-z": "Sortuj A do Z",
+    "sort_z-a": "Sortuj Z do A",
+    "sort_newest": "Sortuj według najnowszych (tylko pliki)",
+    "sort_oldest": "Sortuj według najstarszych (tylko pliki)",
+    "sort_largest": "Sortuj według największych (tylko pliki)",
+    "sort_smallest": "Sortuj według najmniejszych (tylko pliki)",
+    "toggle_sidebar": "Przełącz pasek boczny",
+    "go_to_homepage": "Idź do strony głównej",
+    "hide_panel": "Ukryj pasek boczny",
+    "show_panel": "Pokaż pasek boczny",
+    "files": "Pliki",
+    "search": "Szukaj",
+    "search_title": "SZUKAJ",
+    "settings": "Ustawienia",
+    "settings_title": "USTAWIENIA",
+    "filtered_notes": "Filtrowane notatki"
+  },
+  "editor": {
+    "placeholder": "Zacznij pisać w Markdownie...",
+    "drop_hint": "💡 Upuść tutaj, aby wstawić w miejscu kursora...",
+    "mode_edit": "Edycja",
+    "mode_split": "Podział",
+    "mode_preview": "Podgląd",
+    "edited": "Edytowano {{time}}",
+    "just_now": "przed chwilą",
+    "minutes_ago": "{{count}} min temu",
+    "hours_ago": "{{count}} godz. temu",
+    "days_ago": "{{count}} dni temu",
+    "tasks_all_checked": "Zaznaczono {{changed}} z {{total}} zadań",
+    "tasks_all_unchecked": "Odznaczono {{changed}} z {{total}} zadań"
+  },
+  "notes": {
+    "confirm_delete": "Usunąć „{{name}}”?",
+    "already_exists": "Notatka o nazwie „{{name}}” już istnieje w tej lokalizacji.\nWybierz inną nazwę.",
+    "prompt_name": "Wprowadź nazwę notatki:",
+    "input_placeholder": "Nazwa notatki",
+    "prompt_name_in_folder": "Stwórz notatkę w „{{folder}}”.",
+    "prompt_name_with_path": "Możesz użyć formatu folder/nazwa, aby umieścić notatkę w zagnieżdżonym folderze.",
+    "prompt_rename": "Wprowadź nową nazwę:",
+    "invalid_name": "Nieprawidłowa nazwa notatki.",
+    "empty_name": "Nazwa notatki nie może być pusta.",
+    "not_found": "Nie znaleziono notatki: {{path}}",
+    "create_from_link": "Notatka „{{path}}” nie istnieje.\n\nCzy chcesz ją utworzyć?",
+    "no_content": "Brak treści notatki do wyeksportowania",
+    "open_first": "Najpierw otwórz notatkę, aby przesłać obrazy.",
+    "save_conflict_title": "Notatka zmieniona gdzie indziej",
+    "save_conflict_message": "Notatka „{{name}}” zmieniła się na dysku od czasu jej otwarcia: zapisała do niej inna karta, narzędzie do synchronizacji lub agent AI.\n\nPrzeładuj pokazuje wersję z dysku; niezapisane zmiany zostaną odrzucone.\nNadpisz zapisuje Twoją wersję w miejsce tamtej.",
+    "save_conflict_overwrite": "Nadpisz",
+    "save_conflict_reload": "Przeładuj",
+    "save_conflict_unsaved": "„{{name}}”: ostatnie zmiany nie zostały zapisane, notatka zmieniła się gdzie indziej."
+  },
+  "folders": {
+    "confirm_delete": "⚠️ OSTRZEŻENIE ⚠️\n\nCzy na pewno chcesz usunąć folder „{{name}}”?\n\nTo TRWALE usunie:\n• Wszystkie notatki w tym folderze\n• Wszystkie podfoldery i ich zawartość\n\nTej operacji NIE MOŻNA cofnąć!",
+    "already_exists": "Folder o nazwie „{{name}}” już istnieje w tej lokalizacji.\nWybierz inną nazwę.",
+    "prompt_name": "Wprowadź nazwę folderu:",
+    "folder_name": "Nazwa folderu",
+    "input_placeholder": "Nazwa folderu",
+    "prompt_name_in_folder": "Stwórz podfolder w „{{folder}}”.",
+    "prompt_name_with_path": "Użyj ukośników w ścieżce, aby zagnieździć foldery (np. „Projekty” lub „Praca/2025”).",
+    "prompt_rename": "Zmień nazwę folderu „{{name}}” na:",
+    "rename_modal_title": "Zmień nazwę folderu",
+    "rename_modal_description": "Wprowadź nową nazwę dla folderu „{{name}}”.",
+    "rename_modal_label": "Nowa nazwa",
+    "invalid_name": "Nieprawidłowa nazwa folderu.",
+    "cannot_move_into_self": "Nie można przenieść folderu do samego siebie ani do jego podfolderu.",
+    "empty": "pusty"
+  },
+  "toolbar": {
+    "undo": "Cofnij (Ctrl+Z)",
+    "redo": "Ponów (Ctrl+Y)",
+    "delete_note": "Usuń notatkę",
+    "delete_image": "Usuń obraz",
+    "delete_drawing": "Usuń szkic",
+    "export_html": "Eksportuj jako HTML",
+    "print_preview": "Podgląd wydruku",
+    "copy_link": "Skopiuj link do schowka",
+    "add_favorite": "Dodaj do ulubionych",
+    "remove_favorite": "Usuń z ulubionych"
+  },
+  "zen_mode": {
+    "title": "Tryb Zen",
+    "tooltip": "Tryb Zen (Ctrl+Alt+Z)",
+    "exit": "Wyjdź z trybu Zen",
+    "exit_hint": "Wyjdź z trybu Zen (Esc)"
+  },
+  "share": {
+    "button_tooltip": "Udostępnij notatkę",
+    "modal_title": "Udostępnij notatkę",
+    "not_shared_description": "Ta notatka nie jest obecnie udostępniana. Utwórz link, aby udostępnić ją każdemu.",
+    "shared_description": "Każdy, kto ma ten link, może wyświetlić tę notatkę:",
+    "create_link": "Utwórz link udostępniania",
+    "copy": "Kopiuj",
+    "stop_sharing": "Zatrzymaj udostępnianie",
+    "confirm_revoke": "Czy na pewno chcesz zatrzymać udostępnianie tej notatki? Link do udostępniania przestanie działać.",
+    "error_creating": "Nie udało się utworzyć linku udostępniania: {{error}}",
+    "error_revoking": "Nie udało się cofnąć linku udostępniania: {{error}}",
+    "show_qr": "Pokaż kod QR",
+    "hide_qr": "Ukryj kod QR",
+    "panel_title": "Udostępnione",
+    "no_shared": "Brak udostępnionych notatek",
+    "link_name": "Nazwa linku",
+    "use_random_link": "Użyj losowego linku",
+    "custom_link_warning": "Każdy, kto odgadnie nazwę, może otworzyć notatkę. Do treści wrażliwych użyj losowego linku.",
+    "slug_available": "Nazwa jest dostępna",
+    "slug_taken": "Inny link już używa tej nazwy",
+    "slug_invalid_chars": "Używaj tylko liter, cyfr, łączników i podkreśleń",
+    "slug_too_short": "Użyj co najmniej {{min}} znaków",
+    "slug_too_long": "Użyj najwyżej {{max}} znaków",
+    "update_link": "Zaktualizuj link",
+    "link_not_saved": "niezapisane",
+    "confirm_slug_change": "Czy na pewno chcesz zmienić nazwę linku? Obecny link natychmiast przestanie działać.",
+    "error_updating": "Nie udało się zaktualizować linku udostępniania: {{error}}"
+  },
+  "quick_switcher": {
+    "placeholder": "Wpisz, aby wyszukać notatki...",
+    "no_results": "Brak pasujących notatek",
+    "recent_hint": "Pokazywanie ostatnich notatek. Wpisz, aby przeszukać wszystkie.",
+    "navigate": "nawiguj",
+    "open": "otwórz",
+    "close": "zamknij"
+  },
+  "tags": {
+    "title": "Tagi",
+    "no_tags": "Nie znaleziono tagów",
+    "hint": "Dodaj tagi za pomocą nagłówka YAML (frontmatter)",
+    "no_matches": "Brak notatek pasujących do wybranych tagów",
+    "clear_all": "Wyczyść filtry tagów",
+    "filter_by": "Filtruj według {{tag}} ({{count}} notatek)"
+  },
+  "outline": {
+    "title": "Spis treści",
+    "no_headings": "Nie znaleziono nagłówków",
+    "hint": "Dodaj nagłówki, używając składni #"
+  },
+  "backlinks": {
+    "title": "Linki zwrotne",
+    "no_backlinks": "Brak linków zwrotnych",
+    "hint": "Inne notatki pojawią się tutaj, gdy będą linkować do tej notatki",
+    "select_note": "Wybierz notatkę, aby zobaczyć linki zwrotne",
+    "more_refs": "więcej"
+  },
+  "stats": {
+    "words": "słów",
+    "reading_time": "~{{minutes}} min czytania",
+    "links": "{{count}} linków",
+    "click_details": "▼ Kliknij po szczegóły"
+  },
+  "graph": {
+    "title": "Widok grafu",
+    "empty": "Brak połączeń do wyświetlenia",
+    "markdown_links": "Linki Markdown",
+    "click_hint": "Kliknięcie: zaznacz • Podwójne kliknięcie: otwórz"
+  },
+  "templates": {
+    "title": "Szablony",
+    "select": "Wybierz szablon...",
+    "prompt_name": "Wprowadź nazwę notatki:",
+    "no_templates": "Nie znaleziono szablonów. Utwórz szablony w folderze _templates.",
+    "create_failed": "Nie udało się utworzyć notatki z szablonu",
+    "create_from_template": "Stwórz z szablonu",
+    "select_template": "Wybierz szablon",
+    "choose_template": "Wybierz szablon",
+    "note_name": "Nazwa notatki",
+    "available_placeholders": "Dostępne zmienne",
+    "create_note": "Utwórz notatkę"
+  },
+  "export": {
+    "failed": "Nie udało się wyeksportować HTML: {{error}}"
+  },
+  "login": {
+    "title": "Logowanie",
+    "tagline": "Twoja baza wiedzy na własnym serwerze",
+    "password_placeholder": "Wprowadź hasło",
+    "unlock_button": "🔓 Odblokuj",
+    "footer": "🔒 Bezpieczne i na własnym serwerze",
+    "error_incorrect_password": "Niepoprawne hasło. Spróbuj ponownie."
+  },
+  "drawing": {
+    "tool_freehand": "Ołówek — rysowanie odręczne",
+    "tool_line": "Prosta linia",
+    "tool_rect": "Prostokąt",
+    "tool_ellipse": "Koło",
+    "color": "Kolor",
+    "width": "Grubość linii",
+    "tool_eraser": "Gumka (maluje kolorem tła)",
+    "tool_eyedropper": "Pipeta — pobierz kolor ze strony",
+    "tool_fill": "Wiadro z farbą — wypełnij połączony obszar kolorem",
+    "tool_text": "Tekst — kliknij na stronie, aby pisać",
+    "clear": "Wyczyść",
+    "clear_hint": "Zastąp pustym obrazem",
+    "clear_title": "Zastąpić pustą stroną?",
+    "clear_confirm": "Zapisany plik PNG i wszystkie rysunki w tej sesji zostaną zastąpione pustym, białym obrazem. Tej operacji nie można cofnąć."
+  },
+  "media": {
+    "confirm_delete": "Usunąć „{{name}}”?",
+    "upload_failed": "Błąd przy wysyłaniu pliku",
+    "no_valid_files": "Nie znaleziono obsługiwanych plików. Wspierane formaty: {{formats}}"
+  },
+  "move": {
+    "failed_note": "Nie udało się przenieść notatki.",
+    "failed_folder": "Nie udało się przenieść folderu.",
+    "failed_media": "Nie udało się przenieść pliku multimedialnego."
+  },
+  "search": {
+    "previous": "Poprzedni (Shift+F3)",
+    "next": "Następny (F3)",
+    "matches": "{{current}} z {{total}}",
+    "match_of": "Wynik {{current}} z {{total}}",
+    "result_singular": "wynik",
+    "result_plural": "wyniki",
+    "no_results": "Brak notatek zawierających „{{query}}”",
+    "searching": "Wyszukiwanie „{{query}}”..."
+  },
+  "theme": {
+    "title": "Skórka"
+  },
+  "language": {
+    "title": "Język"
+  },
+  "syntax_highlight": {
+    "title": "Podświetlanie składni w edytorze",
+    "description": "Kolorowanie składni Markdown w edytorze",
+    "enable": "Włącz podświetlanie składni",
+    "disable": "Wyłącz podświetlanie składni"
+  },
+  "settings": {
+    "account": "Konto",
+    "logout": "Wyloguj się",
+    "readable_line_length": "Czytelna długość linii",
+    "readable_line_length_desc": "Ogranicz szerokość podglądu dla łatwiejszego czytania",
+    "hide_underscore_folders": "Ukryj foldery systemowe",
+    "hide_underscore_folders_desc": "Ukryj foldery _attachments, _templates i inne foldery zaczynające się od podkreślenia na pasku bocznym i na grafie",
+    "tab_inserts_tab": "Klawisz Tab wstawia tabulację",
+    "tab_inserts_tab_desc": "Naciśnięcie klawisza Tab wstawia znak tabulacji zamiast zmiany aktywnego elementu",
+    "new_button_action": "Akcja po kliknięciu +",
+    "new_button_action_desc": "Shift+kliknięcie zawsze pokazuje menu wyboru.",
+    "new_button_option_chooser": "Pokaż menu wyboru (domyślnie)",
+    "new_button_option_note": "Nowa notatka",
+    "new_button_option_folder": "Nowy folder",
+    "new_button_option_template": "Nowa notatka z szablonu",
+    "new_button_option_drawing": "Nowy szkic",
+    "auto_fill_note_title": "Automatycznie uzupełnij tytuł znacznikiem czasu",
+    "auto_fill_note_title_desc": "yyyymmddHHMMSS. Naciśnij Enter, aby zaakceptować, lub zacznij pisać, aby zastąpić."
+  },
+  "homepage": {
+    "title": "Strona główna",
+    "welcome": "Witaj w NoteDiscovery",
+    "get_started": "Stwórz coś aby rozpocząć",
+    "no_notes_title": "Brak notatek",
+    "no_notes_desc": "Stwórz swoją pierwszą notatkę lub folder",
+    "folder_empty": "Ten folder jest pusty",
+    "note_singular": "notatka",
+    "note_plural": "notatki/ek",
+    "folder_singular": "folder",
+    "folder_plural": "foldery/ów",
+    "view_cards": "Widok kart",
+    "view_list": "Widok listy"
+  },
+  "format": {
+    "bold": "Pogrubienie",
+    "italic": "Kursywa",
+    "strikethrough": "Przekreślenie",
+    "heading": "Nagłówek",
+    "link": "Link",
+    "image": "Obrazek",
+    "code": "Kod w treści",
+    "codeblock": "Blok kodu",
+    "quote": "Cytat",
+    "bullet_list": "Wypunktowanie",
+    "numbered_list": "Lista numerowana",
+    "checkbox": "Pole wyboru",
+    "table": "Tabela"
+  },
+  "validation": {
+    "forbidden_chars": "Nazwa zawiera niedozwolone znaki: {{chars}}",
+    "reserved_name": "Ta nazwa jest zarezerwowana przez system operacyjny.",
+    "invalid_dot": "Nazwa nie może składać się z samej kropki.",
+    "trailing_dot_space": "Nazwa nie może kończyć się kropką ani spacją."
+  },
+  "support": {
+    "enjoying_demo": "Wesprzyj ten projekt",
+    "deploy_own": "Uruchom własną instancję",
+    "thank_you": "Dziękujemy za wsparcie! 💚"
+  },
+  "demo": {
+    "title": "TRYB DEMO",
+    "warning": "Zawartość jest resetowana codziennie. Zmiany mogą zostać nadpisane przez innych użytkowników."
+  }
+}

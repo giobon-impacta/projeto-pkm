@@ -1,0 +1,515 @@
+/*
+ * Markdown preview styles — single source of truth for:
+ *   - the in-app preview pane (frontend/index.html)
+ *   - HTML export and public shared notes (backend/export.py)
+ *
+ * Keep element styling here. App chrome (editor, graph, search highlights)
+ * and export chrome (print toolbar, copy buttons) stay in their own files.
+ */
+
+.markdown-preview {
+    line-height: 1.8;
+    color: var(--text-primary);
+    font-size: 16px;
+}
+
+/* Readable line length - constrain text width for better readability */
+.markdown-preview.readable-width {
+    max-width: 750px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Remove top margin from first element */
+.markdown-preview > *:first-child {
+    margin-top: 0 !important;
+}
+
+/* Headings */
+.markdown-preview h1 {
+    font-size: 2.25rem;
+    font-weight: 700;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+    border-bottom: 2px solid var(--border-primary);
+    padding-bottom: 0.5rem;
+}
+.markdown-preview h2 {
+    font-size: 1.875rem;
+    font-weight: 700;
+    margin-top: 1.75rem;
+    margin-bottom: 0.875rem;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-primary);
+    padding-bottom: 0.3rem;
+}
+.markdown-preview h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+.markdown-preview h4 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-top: 1.25rem;
+    margin-bottom: 0.625rem;
+    color: var(--text-primary);
+}
+.markdown-preview h5 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+.markdown-preview h6 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+}
+
+/* Paragraphs and text */
+.markdown-preview p {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    line-height: 1.7;
+}
+
+.markdown-preview strong {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.markdown-preview em {
+    font-style: italic;
+}
+
+/* Lists */
+.markdown-preview ul, .markdown-preview ol {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    margin-left: 1.5rem;
+    padding-left: 0.5rem;
+}
+/* Nested unordered lists: disc → circle → square (common editor convention) */
+.markdown-preview ul { list-style-type: disc; }
+.markdown-preview ul ul { list-style-type: circle; }
+.markdown-preview ul ul ul { list-style-type: square; }
+.markdown-preview ol { list-style-type: decimal; }
+.markdown-preview li {
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+}
+.markdown-preview li > ul,
+.markdown-preview li > ol {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Inline code */
+.markdown-preview code:not(pre code) {
+    background-color: var(--bg-tertiary);
+    color: var(--accent-primary);
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-weight: 500;
+}
+
+/* Code blocks */
+.markdown-preview pre {
+    background-color: var(--bg-tertiary);
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    border: 1px solid var(--border-primary);
+}
+.markdown-preview pre code {
+    background: transparent;
+    padding: 1rem;
+    display: block;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+/* Blockquotes */
+.markdown-preview blockquote {
+    border-left: 4px solid var(--accent-primary);
+    padding-left: 1rem;
+    margin: 1.5rem 0;
+    font-style: italic;
+    color: var(--text-secondary);
+    background-color: var(--bg-tertiary);
+    padding: 1rem;
+    padding-left: 1rem;
+    border-radius: 0.25rem;
+}
+.markdown-preview blockquote p {
+    margin-bottom: 0;
+}
+
+/* Links */
+.markdown-preview a {
+    color: var(--accent-primary);
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color 0.2s;
+    cursor: pointer;
+}
+.markdown-preview a:hover {
+    text-decoration-color: var(--accent-primary);
+}
+
+/* Wikilinks - Obsidian style internal links */
+.markdown-preview a[data-wikilink] {
+    color: var(--link-internal, var(--accent-primary));
+    text-decoration: none;
+    font-weight: 500;
+    background-color: var(--link-internal-bg, transparent);
+    padding: 0 2px;
+    border-radius: 2px;
+    transition: background-color 0.15s, color 0.15s;
+}
+.markdown-preview a[data-wikilink]:hover {
+    background-color: var(--link-internal-hover-bg, var(--bg-tertiary));
+    text-decoration: underline;
+}
+
+/* Broken wikilinks - note doesn't exist (Obsidian shows these dimmed) */
+.markdown-preview a[data-wikilink].wikilink-broken {
+    color: var(--link-broken, var(--text-tertiary));
+    opacity: 0.7;
+}
+.markdown-preview a[data-wikilink].wikilink-broken:hover {
+    opacity: 1;
+}
+
+/* Standard internal links (non-wikilink, e.g. [text](path)) */
+.markdown-preview a:not([href^="http"]):not([href^="https"]):not([href^="//"]):not([href^="mailto:"]):not([data-wikilink]) {
+    color: var(--accent-primary);
+}
+
+/* Tables */
+.markdown-preview table {
+    width: 100%;
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    border-collapse: collapse;
+    border: 1px solid var(--border-primary);
+}
+.markdown-preview th, .markdown-preview td {
+    border: 1px solid var(--border-primary);
+    padding: 0.75rem 1rem;
+    text-align: left;
+}
+.markdown-preview th[align="left"],   .markdown-preview td[align="left"]   { text-align: left; }
+.markdown-preview th[align="right"],  .markdown-preview td[align="right"]  { text-align: right; }
+.markdown-preview th[align="center"], .markdown-preview td[align="center"] { text-align: center; }
+.markdown-preview th {
+    background-color: var(--bg-tertiary);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.markdown-preview tr:nth-child(even) {
+    background-color: var(--bg-secondary);
+}
+
+/* Horizontal rule */
+.markdown-preview hr {
+    border: none;
+    border-top: 2px solid var(--border-primary);
+    margin: 2rem 0;
+}
+
+/* Images */
+.markdown-preview img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    margin: 1rem 0;
+}
+
+/* Embedded Media (audio, video, PDF) */
+.markdown-preview .media-embed {
+    margin: 1.5rem 0;
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+/* Audio embeds */
+.markdown-preview .media-audio {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+    border: 1px solid var(--border-primary);
+}
+.markdown-preview .media-audio audio {
+    width: 100%;
+    max-width: 500px;
+    border-radius: 2rem;
+}
+.markdown-preview .media-audio .media-caption {
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+/* Video embeds */
+.markdown-preview .media-video {
+    background: #000;
+    display: flex;
+    justify-content: center;
+}
+.markdown-preview .media-video video {
+    width: 100%;
+    max-width: 800px;
+    max-height: 450px;
+    border-radius: 0;
+}
+
+/* PDF embeds (iframe) */
+.markdown-preview .media-pdf {
+    border: 1px solid var(--border-primary);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: var(--bg-secondary);
+}
+.markdown-preview .media-pdf iframe {
+    width: 100%;
+    height: 600px;
+    border: none;
+    display: block;
+}
+
+/* PDF links (for external PDFs) */
+.markdown-preview .pdf-link {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+    border: 1px solid var(--border-primary);
+    border-radius: 0.5rem;
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+.markdown-preview .pdf-link:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent-primary);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.markdown-preview .pdf-link:hover .pdf-link-content {
+    color: var(--accent-primary);
+}
+.markdown-preview .pdf-link-content {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.markdown-preview .pdf-link-note {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Callouts — GitHub-style admonitions (> [!NOTE], etc.) */
+.markdown-preview .callout {
+    margin: 1rem 0;
+    padding: 0.75rem 1rem;
+    border-left: 4px solid var(--callout-color, var(--accent-primary));
+    border-radius: 0.375rem;
+    background: var(--callout-bg, var(--bg-secondary));
+}
+.markdown-preview .callout-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: var(--callout-color, var(--accent-primary));
+    margin-bottom: 0.25rem;
+}
+.markdown-preview .callout-icon {
+    font-size: 1.1em;
+    line-height: 1;
+}
+.markdown-preview .callout-body > :first-child { margin-top: 0; }
+.markdown-preview .callout-body > :last-child  { margin-bottom: 0; }
+.markdown-preview .callout-note      { --callout-color: #0969da; --callout-bg: rgba(9, 105, 218, 0.08); }
+.markdown-preview .callout-tip       { --callout-color: #1a7f37; --callout-bg: rgba(26, 127, 55, 0.08); }
+.markdown-preview .callout-important { --callout-color: #8250df; --callout-bg: rgba(130, 80, 223, 0.08); }
+.markdown-preview .callout-warning   { --callout-color: #9a6700; --callout-bg: rgba(154, 103, 0, 0.08); }
+.markdown-preview .callout-caution   { --callout-color: #d1242f; --callout-bg: rgba(209, 36, 47, 0.08); }
+
+/* Task lists */
+.markdown-preview input[type="checkbox"] {
+    margin-right: 0.5rem;
+}
+/* Exports keep them disabled, so only the live preview gets the affordance */
+.markdown-preview input[type="checkbox"]:not([disabled]) {
+    cursor: pointer;
+}
+/* Loose lists (a blank line anywhere in them) wrap item content in a <p>,
+   so both shapes need covering or the bullet reappears next to the box. */
+.markdown-preview li:has(> input[type="checkbox"]),
+.markdown-preview li:has(> p > input[type="checkbox"]) {
+    list-style: none;
+    margin-left: -1.25rem;
+}
+
+/* Math/LaTeX styling */
+.markdown-preview .MathJax {
+    color: var(--text-primary);
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+/* Display math (block) */
+.markdown-preview mjx-container[display="true"] {
+    margin: 1.5rem 0;
+    overflow-x: auto;
+}
+
+/* Inline math */
+.markdown-preview mjx-container[display="false"] {
+    margin: 0 0.2rem;
+}
+
+/* Mermaid diagram styling - minimal, let Mermaid handle its own rendering */
+.markdown-preview .mermaid-rendered svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Enhanced Shell/Bash Syntax Highlighting */
+.markdown-preview pre code.language-shell .hljs-meta,
+.markdown-preview pre code.language-bash .hljs-meta,
+.markdown-preview pre code.language-sh .hljs-meta {
+    color: #7c3aed !important; /* Purple for prompts like $ # */
+    font-weight: 600;
+}
+
+.markdown-preview pre code.language-shell .hljs-built_in,
+.markdown-preview pre code.language-bash .hljs-built_in,
+.markdown-preview pre code.language-sh .hljs-built_in {
+    color: #10b981 !important; /* Green for built-in commands */
+    font-weight: 500;
+}
+
+.markdown-preview pre code.language-shell .hljs-string,
+.markdown-preview pre code.language-bash .hljs-string,
+.markdown-preview pre code.language-sh .hljs-string {
+    color: #f59e0b !important; /* Orange for strings */
+}
+
+.markdown-preview pre code.language-shell .hljs-variable,
+.markdown-preview pre code.language-bash .hljs-variable,
+.markdown-preview pre code.language-sh .hljs-variable {
+    color: #06b6d4 !important; /* Cyan for variables */
+    font-weight: 500;
+}
+
+.markdown-preview pre code.language-shell .hljs-comment,
+.markdown-preview pre code.language-bash .hljs-comment,
+.markdown-preview pre code.language-sh .hljs-comment {
+    color: #6b7280 !important; /* Gray for comments */
+    font-style: italic;
+}
+
+.markdown-preview pre code.language-shell .hljs-keyword,
+.markdown-preview pre code.language-bash .hljs-keyword,
+.markdown-preview pre code.language-sh .hljs-keyword {
+    color: #ec4899 !important; /* Pink for keywords like if, then, else */
+    font-weight: 600;
+}
+
+.markdown-preview pre code.language-shell .hljs-number,
+.markdown-preview pre code.language-bash .hljs-number,
+.markdown-preview pre code.language-sh .hljs-number {
+    color: #8b5cf6 !important; /* Purple for numbers */
+}
+
+.markdown-preview pre code.language-shell .hljs-literal,
+.markdown-preview pre code.language-bash .hljs-literal,
+.markdown-preview pre code.language-sh .hljs-literal {
+    color: #3b82f6 !important; /* Blue for literals like true, false */
+    font-weight: 500;
+}
+
+/* Enhanced PowerShell Syntax Highlighting */
+.markdown-preview pre code.language-powershell .hljs-built_in,
+.markdown-preview pre code.language-ps1 .hljs-built_in,
+.markdown-preview pre code.language-ps .hljs-built_in {
+    color: #10b981 !important; /* Green for cmdlets like Get-Process, Set-Location */
+    font-weight: 600;
+}
+
+.markdown-preview pre code.language-powershell .hljs-literal,
+.markdown-preview pre code.language-ps1 .hljs-literal,
+.markdown-preview pre code.language-ps .hljs-literal {
+    color: #3b82f6 !important; /* Blue for $true, $false, $null */
+    font-weight: 600;
+}
+
+.markdown-preview pre code.language-powershell .hljs-variable,
+.markdown-preview pre code.language-ps1 .hljs-variable,
+.markdown-preview pre code.language-ps .hljs-variable {
+    color: #06b6d4 !important; /* Cyan for $variables */
+    font-weight: 500;
+}
+
+.markdown-preview pre code.language-powershell .hljs-string,
+.markdown-preview pre code.language-ps1 .hljs-string,
+.markdown-preview pre code.language-ps .hljs-string {
+    color: #f59e0b !important; /* Orange for strings */
+}
+
+.markdown-preview pre code.language-powershell .hljs-keyword,
+.markdown-preview pre code.language-ps1 .hljs-keyword,
+.markdown-preview pre code.language-ps .hljs-keyword {
+    color: #ec4899 !important; /* Pink for keywords like if, else, foreach */
+    font-weight: 600;
+}
+
+.markdown-preview pre code.language-powershell .hljs-params,
+.markdown-preview pre code.language-ps1 .hljs-params,
+.markdown-preview pre code.language-ps .hljs-params {
+    color: #8b5cf6 !important; /* Purple for -Parameters */
+    font-weight: 500;
+}
+
+.markdown-preview pre code.language-powershell .hljs-type,
+.markdown-preview pre code.language-ps1 .hljs-type,
+.markdown-preview pre code.language-ps .hljs-type {
+    color: #14b8a6 !important; /* Teal for [Types] */
+    font-weight: 500;
+}
+
+.markdown-preview pre code.language-powershell .hljs-comment,
+.markdown-preview pre code.language-ps1 .hljs-comment,
+.markdown-preview pre code.language-ps .hljs-comment {
+    color: #6b7280 !important; /* Gray for comments */
+    font-style: italic;
+}
+
+.markdown-preview pre code.language-powershell .hljs-number,
+.markdown-preview pre code.language-ps1 .hljs-number,
+.markdown-preview pre code.language-ps .hljs-number {
+    color: #8b5cf6 !important; /* Purple for numbers */
+}
+
+.markdown-preview pre code.language-powershell .hljs-operator,
+.markdown-preview pre code.language-ps1 .hljs-operator,
+.markdown-preview pre code.language-ps .hljs-operator {
+    color: #f472b6 !important; /* Pink for operators */
+}

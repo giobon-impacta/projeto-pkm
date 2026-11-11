@@ -1,0 +1,345 @@
+{
+  "_meta": {
+    "code": "it-IT",
+    "name": "Italiano",
+    "flag": "🇮🇹"
+  },
+  "app": {
+    "tagline": "La tua base di conoscenza personale"
+  },
+  "common": {
+    "save": "Salva",
+    "cancel": "Annulla",
+    "delete": "Elimina",
+    "rename": "Rinomina",
+    "create": "Crea",
+    "close": "Chiudi",
+    "confirm_title": "Conferma",
+    "yes": "✓ Sì",
+    "no": "✗ No",
+    "ok": "OK",
+    "error": "Errore",
+    "loading": "Caricamento...",
+    "saved": "✓ Salvato",
+    "saving": "Salvataggio...",
+    "copied": "Copiato!",
+    "copy_to_clipboard": "Copia negli appunti",
+    "failed": "Impossibile {{action}}. Riprova."
+  },
+  "toast": {
+    "region_label": "Notifiche",
+    "dismiss": "Chiudi"
+  },
+  "sidebar": {
+    "title": "FILE",
+    "favorites_title": "Preferiti",
+    "folders_and_notes": "Cartelle e Note",
+    "new_button": "+ Nuovo",
+    "new_note": "Nuova Nota",
+    "new_folder": "Nuova Cartella",
+    "new_from_template": "Nuovo da Modello",
+    "new_drawing": "Nuovo disegno",
+    "rename_folder": "Rinomina cartella",
+    "delete_folder": "Elimina cartella",
+    "search_placeholder": "Cerca note...",
+    "search_hint": "Digita per cercare le tue note",
+    "clear_search": "Cancella ricerca",
+    "drag_hint": "💡 Trascina=Sposta",
+    "root_folder": "📂 Cartella principale",
+    "no_notes": "Nessuna nota. Crea la tua prima nota!",
+    "no_notes_yet": "Nessuna nota o cartella.",
+    "create_first": "Crea la tua prima nota o cartella!",
+    "loading_notes": "Caricamento delle tue note…",
+    "no_favorites": "Nessun preferito",
+    "no_results": "Nessun risultato trovato",
+    "expand_all": "Espandi tutte le cartelle",
+    "collapse_all": "Comprimi tutte le cartelle",
+    "sort_a-z": "Ordina A-Z",
+    "sort_z-a": "Ordina Z-A",
+    "sort_newest": "Ordina per più recente (solo file)",
+    "sort_oldest": "Ordina per più vecchio (solo file)",
+    "sort_largest": "Ordina per più grande (solo file)",
+    "sort_smallest": "Ordina per più piccolo (solo file)",
+    "toggle_sidebar": "Mostra/nascondi barra laterale",
+    "go_to_homepage": "Vai alla home",
+    "hide_panel": "Nascondi il pannello laterale",
+    "show_panel": "Mostra il pannello laterale",
+    "files": "File",
+    "search": "Cerca",
+    "search_title": "CERCA",
+    "settings": "Impostazioni",
+    "settings_title": "IMPOSTAZIONI",
+    "filtered_notes": "Note Filtrate"
+  },
+  "editor": {
+    "placeholder": "Inizia a scrivere in markdown...",
+    "drop_hint": "💡 Rilascia qui per inserire alla posizione del cursore...",
+    "mode_edit": "Modifica",
+    "mode_split": "Dividi",
+    "mode_preview": "Anteprima",
+    "edited": "Modificato {{time}}",
+    "just_now": "adesso",
+    "minutes_ago": "{{count}}m fa",
+    "hours_ago": "{{count}}h fa",
+    "days_ago": "{{count}}g fa",
+    "tasks_all_checked": "{{changed}} di {{total}} attività selezionate",
+    "tasks_all_unchecked": "{{changed}} di {{total}} attività deselezionate"
+  },
+  "notes": {
+    "confirm_delete": "Eliminare \"{{name}}\"?",
+    "already_exists": "Una nota chiamata \"{{name}}\" esiste già in questa posizione.\nScegli un nome diverso.",
+    "prompt_name": "Inserisci nome nota:",
+    "input_placeholder": "Nome nota",
+    "prompt_name_in_folder": "Crea nota in \"{{folder}}\".",
+    "prompt_name_with_path": "Puoi usare cartella/nome per annidare la nota.",
+    "prompt_rename": "Inserisci nuovo nome:",
+    "invalid_name": "Nome nota non valido.",
+    "empty_name": "Il nome della nota non può essere vuoto.",
+    "not_found": "Nota non trovata: {{path}}",
+    "create_from_link": "La nota \"{{path}}\" non esiste.\n\nVuoi crearla?",
+    "no_content": "Nessun contenuto da esportare",
+    "open_first": "Apri prima una nota per caricare immagini.",
+    "save_conflict_title": "Nota modificata altrove",
+    "save_conflict_message": "\"{{name}}\" è cambiata sul disco da quando l'hai aperta: un'altra scheda, uno strumento di sincronizzazione o un agente IA ci ha scritto.\n\nRicarica mostra la versione sul disco; le modifiche non salvate vengono scartate.\nSovrascrivi salva la tua versione al posto della loro.",
+    "save_conflict_overwrite": "Sovrascrivi",
+    "save_conflict_reload": "Ricarica",
+    "save_conflict_unsaved": "\"{{name}}\": le ultime modifiche non sono state salvate, la nota è cambiata altrove."
+  },
+  "folders": {
+    "confirm_delete": "⚠️ ATTENZIONE ⚠️\n\nSei sicuro di voler eliminare la cartella \"{{name}}\"?\n\nQuesto eliminerà PERMANENTEMENTE:\n• Tutte le note in questa cartella\n• Tutte le sottocartelle e i loro contenuti\n\nQuesta azione NON PUÒ essere annullata!",
+    "already_exists": "Una cartella chiamata \"{{name}}\" esiste già in questa posizione.\nScegli un nome diverso.",
+    "prompt_name": "Inserisci nome cartella:",
+    "folder_name": "Nome cartella",
+    "input_placeholder": "Nome cartella",
+    "prompt_name_in_folder": "Crea sottocartella in \"{{folder}}\".",
+    "prompt_name_with_path": "Usa gli slash nel percorso per annidare (es. «Progetti» o «Lavoro/2025»).",
+    "prompt_rename": "Rinomina cartella \"{{name}}\" in:",
+    "rename_modal_title": "Rinomina cartella",
+    "rename_modal_description": "Inserisci il nuovo nome per la cartella \"{{name}}\".",
+    "rename_modal_label": "Nuovo nome",
+    "invalid_name": "Nome cartella non valido.",
+    "cannot_move_into_self": "Impossibile spostare la cartella in se stessa o in una sottocartella.",
+    "empty": "vuota"
+  },
+  "toolbar": {
+    "undo": "Annulla (Ctrl+Z)",
+    "redo": "Ripeti (Ctrl+Y)",
+    "delete_note": "Elimina nota",
+    "delete_image": "Elimina immagine",
+    "delete_drawing": "Elimina disegno",
+    "export_html": "Esporta come HTML",
+    "print_preview": "Anteprima di stampa",
+    "copy_link": "Copia link negli appunti",
+    "add_favorite": "Aggiungi ai preferiti",
+    "remove_favorite": "Rimuovi dai preferiti"
+  },
+  "zen_mode": {
+    "title": "Modalità Zen",
+    "tooltip": "Modalità Zen (Ctrl+Alt+Z)",
+    "exit": "Esci dalla Modalità Zen",
+    "exit_hint": "Esci dalla Modalità Zen (Esc)"
+  },
+  "share": {
+    "button_tooltip": "Condividi nota",
+    "modal_title": "Condividi Nota",
+    "not_shared_description": "Questa nota non è attualmente condivisa. Crea un link per condividerla con chiunque.",
+    "shared_description": "Chiunque abbia questo link può vedere questa nota:",
+    "create_link": "Crea link di condivisione",
+    "copy": "Copia",
+    "stop_sharing": "Interrompi condivisione",
+    "confirm_revoke": "Sei sicuro di voler interrompere la condivisione di questa nota? Il link non funzionerà più.",
+    "error_creating": "Impossibile creare il link: {{error}}",
+    "error_revoking": "Impossibile revocare il link: {{error}}",
+    "show_qr": "Mostra codice QR",
+    "hide_qr": "Nascondi codice QR",
+    "panel_title": "Condivise",
+    "no_shared": "Nessuna nota condivisa",
+    "link_name": "Nome del link",
+    "use_random_link": "Usa un link casuale",
+    "custom_link_warning": "Chi indovina il nome può aprire la nota. Usa un link casuale per contenuti riservati.",
+    "slug_available": "Nome disponibile",
+    "slug_taken": "Un altro link usa già questo nome",
+    "slug_invalid_chars": "Usa solo lettere, numeri, trattini e trattini bassi",
+    "slug_too_short": "Usa almeno {{min}} caratteri",
+    "slug_too_long": "Usa al massimo {{max}} caratteri",
+    "update_link": "Aggiorna link",
+    "link_not_saved": "non salvato",
+    "confirm_slug_change": "Sei sicuro di voler cambiare il nome del link? Il link attuale smetterà subito di funzionare.",
+    "error_updating": "Impossibile aggiornare il link: {{error}}"
+  },
+  "quick_switcher": {
+    "placeholder": "Cerca note...",
+    "no_results": "Nessun risultato",
+    "recent_hint": "Note recenti. Digita per cercare tutte.",
+    "navigate": "naviga",
+    "open": "apri",
+    "close": "chiudi"
+  },
+  "tags": {
+    "title": "Tag",
+    "no_tags": "Nessun tag trovato",
+    "hint": "Aggiungi tag usando il frontmatter YAML",
+    "no_matches": "Nessuna nota corrisponde ai tag selezionati",
+    "clear_all": "Cancella filtri tag",
+    "filter_by": "Filtra per {{tag}} ({{count}} note)"
+  },
+  "outline": {
+    "title": "Indice",
+    "no_headings": "Nessun titolo trovato",
+    "hint": "Aggiungi titoli usando la sintassi #"
+  },
+  "backlinks": {
+    "title": "Backlink",
+    "no_backlinks": "Nessun backlink trovato",
+    "hint": "Altre note appariranno qui quando fanno riferimento a questa nota",
+    "select_note": "Seleziona una nota per vedere i backlink",
+    "more_refs": "altri"
+  },
+  "stats": {
+    "words": "parole",
+    "reading_time": "~{{minutes}}m lettura",
+    "links": "{{count}} link",
+    "click_details": "▼ Clicca per dettagli"
+  },
+  "graph": {
+    "title": "Grafo",
+    "empty": "Nessuna connessione da visualizzare",
+    "markdown_links": "Link markdown",
+    "click_hint": "Clic: seleziona • Doppio clic: apri"
+  },
+  "templates": {
+    "title": "Modelli",
+    "select": "Seleziona un modello...",
+    "prompt_name": "Inserisci nome nota:",
+    "no_templates": "Nessun modello trovato. Crea modelli nella cartella _templates.",
+    "create_failed": "Impossibile creare nota dal modello",
+    "create_from_template": "Crea da Modello",
+    "select_template": "Seleziona Modello",
+    "choose_template": "Scegli un modello",
+    "note_name": "Nome Nota",
+    "available_placeholders": "Segnaposto disponibili",
+    "create_note": "Crea Nota"
+  },
+  "export": {
+    "failed": "Esportazione HTML fallita: {{error}}"
+  },
+  "login": {
+    "title": "Accesso",
+    "tagline": "La tua base di conoscenza personale",
+    "password_placeholder": "Inserisci la tua password",
+    "unlock_button": "🔓 Sblocca",
+    "footer": "🔒 Sicuro e ospitato localmente",
+    "error_incorrect_password": "Password errata. Riprova."
+  },
+  "drawing": {
+    "tool_freehand": "Matita — mano libera",
+    "tool_line": "Linea retta",
+    "tool_rect": "Rettangolo",
+    "tool_ellipse": "Cerchio",
+    "color": "Colore",
+    "width": "Spessore tratto",
+    "tool_eraser": "Gomma (disegna col colore di sfondo)",
+    "tool_eyedropper": "Contagocce — prendi un colore dal canvas",
+    "tool_fill": "Secchiello — riempi l'area connessa con il colore",
+    "tool_text": "Testo — clicca sulla tela per scrivere",
+    "clear": "Svuota",
+    "clear_hint": "Sostituisci con immagine vuota",
+    "clear_title": "Sostituire con tela bianca?",
+    "clear_confirm": "Il PNG salvato e tutti i tratti di questa sessione saranno sostituiti da un'immagine bianca vuota. Non è possibile annullare."
+  },
+  "media": {
+    "confirm_delete": "Eliminare \"{{name}}\"?",
+    "upload_failed": "Caricamento file fallito",
+    "no_valid_files": "Nessun file valido trovato. Supportati: {{formats}}"
+  },
+  "move": {
+    "failed_note": "Impossibile spostare la nota.",
+    "failed_folder": "Impossibile spostare la cartella.",
+    "failed_media": "Impossibile spostare il file multimediale."
+  },
+  "search": {
+    "previous": "Precedente (Shift+F3)",
+    "next": "Successivo (F3)",
+    "matches": "{{current}} di {{total}}",
+    "match_of": "Risultato {{current}} di {{total}}",
+    "result_singular": "risultato",
+    "result_plural": "risultati",
+    "no_results": "Nessuna nota contiene \"{{query}}\"",
+    "searching": "Ricerca di \"{{query}}\"..."
+  },
+  "theme": {
+    "title": "Tema"
+  },
+  "language": {
+    "title": "Lingua"
+  },
+  "syntax_highlight": {
+    "title": "Evidenziazione Sintassi Editor",
+    "description": "Colora la sintassi markdown nell'editor",
+    "enable": "Attiva evidenziazione sintassi",
+    "disable": "Disattiva evidenziazione sintassi"
+  },
+  "settings": {
+    "account": "Account",
+    "logout": "Esci",
+    "readable_line_length": "Larghezza riga leggibile",
+    "readable_line_length_desc": "Limita la larghezza dell'anteprima per una lettura più facile",
+    "hide_underscore_folders": "Nascondi cartelle di sistema",
+    "hide_underscore_folders_desc": "Nascondi _attachments, _templates e altre cartelle con underscore dalla barra laterale e dal grafo",
+    "tab_inserts_tab": "Tab inserisce tabulazione",
+    "tab_inserts_tab_desc": "Premi Tab per inserire una tabulazione invece di cambiare focus",
+    "new_button_action": "Quando clicchi su +",
+    "new_button_action_desc": "Shift+clic mostra sempre il selettore.",
+    "new_button_option_chooser": "Mostra selettore (predefinito)",
+    "new_button_option_note": "Nuova nota",
+    "new_button_option_folder": "Nuova cartella",
+    "new_button_option_template": "Nuova nota da modello",
+    "new_button_option_drawing": "Nuovo disegno",
+    "auto_fill_note_title": "Compila titolo con timestamp",
+    "auto_fill_note_title_desc": "aaaammddHHMMSS. Invio accetta, digita per sostituire."
+  },
+  "homepage": {
+    "title": "Home",
+    "welcome": "Benvenuto in NoteDiscovery",
+    "get_started": "Crea qualcosa per iniziare",
+    "no_notes_title": "Nessuna nota",
+    "no_notes_desc": "Crea la tua prima nota o cartella",
+    "folder_empty": "Questa cartella è vuota",
+    "note_singular": "nota",
+    "note_plural": "note",
+    "folder_singular": "cartella",
+    "folder_plural": "cartelle",
+    "view_cards": "Vista a schede",
+    "view_list": "Vista elenco"
+  },
+  "format": {
+    "bold": "Grassetto",
+    "italic": "Corsivo",
+    "strikethrough": "Barrato",
+    "heading": "Titolo",
+    "link": "Link",
+    "image": "Immagine",
+    "code": "Codice inline",
+    "codeblock": "Blocco di codice",
+    "quote": "Citazione",
+    "bullet_list": "Elenco puntato",
+    "numbered_list": "Elenco numerato",
+    "checkbox": "Casella di controllo",
+    "table": "Tabella"
+  },
+  "validation": {
+    "forbidden_chars": "Il nome contiene caratteri non consentiti: {{chars}}",
+    "reserved_name": "Questo nome è riservato dal sistema operativo.",
+    "invalid_dot": "Il nome non può essere solo un punto.",
+    "trailing_dot_space": "Il nome non può terminare con un punto o uno spazio."
+  },
+  "support": {
+    "enjoying_demo": "Supporta questo progetto",
+    "deploy_own": "Crea la tua istanza",
+    "thank_you": "Grazie per il tuo supporto! 💚"
+  },
+  "demo": {
+    "title": "MODALITÀ DEMO",
+    "warning": "I contenuti vengono ripristinati ogni giorno. Le modifiche potrebbero essere sovrascritte da altri utenti."
+  }
+}

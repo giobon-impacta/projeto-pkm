@@ -1,0 +1,345 @@
+{
+  "_meta": {
+    "code": "de-DE",
+    "name": "Deutsch",
+    "flag": "🇩🇪"
+  },
+  "app": {
+    "tagline": "Deine selbstgehostete Wissensdatenbank"
+  },
+  "common": {
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "rename": "Umbenennen",
+    "create": "Erstellen",
+    "close": "Schließen",
+    "confirm_title": "Bestätigen",
+    "yes": "✓ Ja",
+    "no": "✗ Nein",
+    "ok": "OK",
+    "error": "Fehler",
+    "loading": "Laden...",
+    "saved": "✓ Gespeichert",
+    "saving": "Speichern...",
+    "copied": "Kopiert!",
+    "copy_to_clipboard": "In Zwischenablage kopieren",
+    "failed": "{{action}} fehlgeschlagen. Bitte versuche es erneut."
+  },
+  "toast": {
+    "region_label": "Benachrichtigungen",
+    "dismiss": "Schließen"
+  },
+  "sidebar": {
+    "title": "DATEIEN",
+    "favorites_title": "Favoriten",
+    "folders_and_notes": "Ordner & Notizen",
+    "new_button": "+ Neu",
+    "new_note": "Neue Notiz",
+    "new_folder": "Neuer Ordner",
+    "new_from_template": "Neu aus Vorlage",
+    "new_drawing": "Neue Zeichnung",
+    "rename_folder": "Ordner umbenennen",
+    "delete_folder": "Ordner löschen",
+    "search_placeholder": "Notizen durchsuchen...",
+    "search_hint": "Tippe, um deine Notizen zu durchsuchen",
+    "clear_search": "Suche löschen",
+    "drag_hint": "💡 Ziehen=Verschieben",
+    "root_folder": "📂 Hauptordner",
+    "no_notes": "Du hast noch keine Notizen. Erstelle deine erste!",
+    "no_notes_yet": "Noch keine Notizen oder Ordner.",
+    "create_first": "Erstelle deine erste Notiz oder Ordner!",
+    "loading_notes": "Notizen werden geladen…",
+    "no_favorites": "Noch keine Favoriten",
+    "no_results": "Keine Ergebnisse gefunden",
+    "expand_all": "Alle Ordner aufklappen",
+    "collapse_all": "Alle Ordner zuklappen",
+    "sort_a-z": "Sortieren A-Z",
+    "sort_z-a": "Sortieren Z-A",
+    "sort_newest": "Nach neuesten sortieren (nur Dateien)",
+    "sort_oldest": "Nach ältesten sortieren (nur Dateien)",
+    "sort_largest": "Nach größten sortieren (nur Dateien)",
+    "sort_smallest": "Nach kleinsten sortieren (nur Dateien)",
+    "toggle_sidebar": "Seitenleiste umschalten",
+    "go_to_homepage": "Zur Startseite",
+    "hide_panel": "Seitenleiste ausblenden",
+    "show_panel": "Seitenleiste einblenden",
+    "files": "Dateien",
+    "search": "Suchen",
+    "search_title": "SUCHE",
+    "settings": "Einstellungen",
+    "settings_title": "EINSTELLUNGEN",
+    "filtered_notes": "Gefilterte Notizen"
+  },
+  "editor": {
+    "placeholder": "Schreibe in Markdown...",
+    "drop_hint": "💡 Hier ablegen, um an Cursorposition einzufügen...",
+    "mode_edit": "Bearbeiten",
+    "mode_split": "Geteilt",
+    "mode_preview": "Vorschau",
+    "edited": "Bearbeitet {{time}}",
+    "just_now": "gerade eben",
+    "minutes_ago": "vor {{count}}m",
+    "hours_ago": "vor {{count}}h",
+    "days_ago": "vor {{count}}T",
+    "tasks_all_checked": "{{changed}} von {{total}} Aufgaben als erledigt markiert",
+    "tasks_all_unchecked": "{{changed}} von {{total}} Aufgaben als offen markiert"
+  },
+  "notes": {
+    "confirm_delete": "\"{{name}}\" löschen?",
+    "already_exists": "Eine Notiz mit dem Namen \"{{name}}\" existiert bereits an diesem Ort.\nBitte wähle einen anderen Namen.",
+    "prompt_name": "Notizname eingeben:",
+    "input_placeholder": "Notizname",
+    "prompt_name_in_folder": "Notiz in \"{{folder}}\" erstellen.",
+    "prompt_name_with_path": "Mit Ordner/Name kannst du verschachtelte Notizen anlegen.",
+    "prompt_rename": "Neuen Namen eingeben:",
+    "invalid_name": "Ungültiger Notizname.",
+    "empty_name": "Der Notizname darf nicht leer sein.",
+    "not_found": "Notiz nicht gefunden: {{path}}",
+    "create_from_link": "Notiz \"{{path}}\" existiert nicht.\n\nMöchtest du sie erstellen?",
+    "no_content": "Kein Inhalt zum Exportieren",
+    "open_first": "Bitte öffne zuerst eine Notiz, bevor du Bilder hochlädst.",
+    "save_conflict_title": "Notiz anderswo geändert",
+    "save_conflict_message": "\"{{name}}\" wurde seit dem Öffnen auf der Festplatte geändert: Ein anderer Tab, ein Sync-Tool oder ein KI-Agent hat hineingeschrieben.\n\nNeu laden zeigt die Version auf der Festplatte; deine ungespeicherten Änderungen gehen verloren.\nÜberschreiben speichert deine Version anstelle der anderen.",
+    "save_conflict_overwrite": "Überschreiben",
+    "save_conflict_reload": "Neu laden",
+    "save_conflict_unsaved": "\"{{name}}\": Deine letzten Änderungen wurden nicht gespeichert, die Notiz wurde anderswo geändert."
+  },
+  "folders": {
+    "confirm_delete": "⚠️ WARNUNG ⚠️\n\nBist du sicher, dass du den Ordner \"{{name}}\" löschen möchtest?\n\nDies LÖSCHT DAUERHAFT:\n• Alle Notizen in diesem Ordner\n• Alle Unterordner und deren Inhalte\n\nDiese Aktion kann NICHT rückgängig gemacht werden!",
+    "already_exists": "Ein Ordner mit dem Namen \"{{name}}\" existiert bereits an diesem Ort.\nBitte wähle einen anderen Namen.",
+    "prompt_name": "Ordnername eingeben:",
+    "folder_name": "Ordnername",
+    "input_placeholder": "Ordnername",
+    "prompt_name_in_folder": "Unterordner in \"{{folder}}\" erstellen.",
+    "prompt_name_with_path": "Schrägstriche im Pfad legen verschachtelte Ordner an (z. B. „Projekte“ oder „Arbeit/2025“).",
+    "prompt_rename": "Ordner \"{{name}}\" umbenennen zu:",
+    "rename_modal_title": "Ordner umbenennen",
+    "rename_modal_description": "Neuen Namen für den Ordner „{{name}}“ eingeben.",
+    "rename_modal_label": "Neuer Name",
+    "invalid_name": "Ungültiger Ordnername.",
+    "cannot_move_into_self": "Ordner kann nicht in sich selbst oder einen Unterordner verschoben werden.",
+    "empty": "leer"
+  },
+  "toolbar": {
+    "undo": "Rückgängig (Strg+Z)",
+    "redo": "Wiederholen (Strg+Y)",
+    "delete_note": "Notiz löschen",
+    "delete_image": "Bild löschen",
+    "delete_drawing": "Zeichnung löschen",
+    "export_html": "Als HTML exportieren",
+    "print_preview": "Druckvorschau",
+    "copy_link": "Link in Zwischenablage kopieren",
+    "add_favorite": "Zu Favoriten hinzufügen",
+    "remove_favorite": "Aus Favoriten entfernen"
+  },
+  "zen_mode": {
+    "title": "Zen-Modus",
+    "tooltip": "Zen-Modus (Strg+Alt+Z)",
+    "exit": "Zen-Modus beenden",
+    "exit_hint": "Zen-Modus beenden (Esc)"
+  },
+  "share": {
+    "button_tooltip": "Notiz teilen",
+    "modal_title": "Notiz teilen",
+    "not_shared_description": "Diese Notiz ist derzeit nicht geteilt. Erstellen Sie einen Link, um sie mit anderen zu teilen.",
+    "shared_description": "Jeder mit diesem Link kann diese Notiz sehen:",
+    "create_link": "Freigabelink erstellen",
+    "copy": "Kopieren",
+    "stop_sharing": "Freigabe beenden",
+    "confirm_revoke": "Sind Sie sicher, dass Sie die Freigabe dieser Notiz beenden möchten? Der Freigabelink funktioniert dann nicht mehr.",
+    "error_creating": "Fehler beim Erstellen des Freigabelinks: {{error}}",
+    "error_revoking": "Fehler beim Widerrufen des Freigabelinks: {{error}}",
+    "show_qr": "QR-Code anzeigen",
+    "hide_qr": "QR-Code ausblenden",
+    "panel_title": "Geteilt",
+    "no_shared": "Keine geteilten Notizen",
+    "link_name": "Linkname",
+    "use_random_link": "Zufälligen Link verwenden",
+    "custom_link_warning": "Wer den Namen errät, kann die Notiz öffnen. Für Vertrauliches einen zufälligen Link verwenden.",
+    "slug_available": "Name ist verfügbar",
+    "slug_taken": "Ein anderer Link verwendet diesen Namen bereits",
+    "slug_invalid_chars": "Nur Buchstaben, Zahlen, Bindestriche und Unterstriche verwenden",
+    "slug_too_short": "Mindestens {{min}} Zeichen verwenden",
+    "slug_too_long": "Höchstens {{max}} Zeichen verwenden",
+    "update_link": "Link aktualisieren",
+    "link_not_saved": "noch nicht gespeichert",
+    "confirm_slug_change": "Möchten Sie den Linknamen ändern? Der aktuelle Freigabelink funktioniert dann sofort nicht mehr.",
+    "error_updating": "Fehler beim Aktualisieren des Freigabelinks: {{error}}"
+  },
+  "quick_switcher": {
+    "placeholder": "Notizen suchen...",
+    "no_results": "Keine Ergebnisse",
+    "recent_hint": "Zeigt aktuelle Notizen. Tippen zum Suchen.",
+    "navigate": "navigieren",
+    "open": "öffnen",
+    "close": "schließen"
+  },
+  "tags": {
+    "title": "Tags",
+    "no_tags": "Keine Tags gefunden",
+    "hint": "Tags mit YAML-Frontmatter hinzufügen",
+    "no_matches": "Keine Notizen entsprechen den ausgewählten Tags",
+    "clear_all": "Tag-Filter löschen",
+    "filter_by": "Nach {{tag}} filtern ({{count}} Notizen)"
+  },
+  "outline": {
+    "title": "Gliederung",
+    "no_headings": "Keine Überschriften gefunden",
+    "hint": "Überschriften mit # hinzufügen"
+  },
+  "backlinks": {
+    "title": "Rückverweise",
+    "no_backlinks": "Keine Rückverweise gefunden",
+    "hint": "Andere Notizen erscheinen hier, wenn sie auf diese Notiz verweisen",
+    "select_note": "Wählen Sie eine Notiz um Rückverweise zu sehen",
+    "more_refs": "mehr"
+  },
+  "stats": {
+    "words": "Wörter",
+    "reading_time": "~{{minutes}} Min. Lesezeit",
+    "links": "{{count}} Links",
+    "click_details": "▼ Klicken für Details"
+  },
+  "graph": {
+    "title": "Graphansicht",
+    "empty": "Keine Verbindungen anzuzeigen",
+    "markdown_links": "Markdown-Links",
+    "click_hint": "Klick: auswählen • Doppelklick: öffnen"
+  },
+  "templates": {
+    "title": "Vorlagen",
+    "select": "Vorlage auswählen...",
+    "prompt_name": "Notizname eingeben:",
+    "no_templates": "Keine Vorlagen gefunden. Erstelle Vorlagen im _templates Ordner.",
+    "create_failed": "Erstellung der Notiz aus Vorlage fehlgeschlagen",
+    "create_from_template": "Aus Vorlage erstellen",
+    "select_template": "Vorlage auswählen",
+    "choose_template": "Vorlage wählen",
+    "note_name": "Notizname",
+    "available_placeholders": "Verfügbare Platzhalter",
+    "create_note": "Notiz erstellen"
+  },
+  "export": {
+    "failed": "HTML-Export fehlgeschlagen: {{error}}"
+  },
+  "login": {
+    "title": "Anmelden",
+    "tagline": "Deine selbstgehostete Wissensdatenbank",
+    "password_placeholder": "Passwort eingeben",
+    "unlock_button": "🔓 Entsperren",
+    "footer": "🔒 Sicher & Selbstgehostet",
+    "error_incorrect_password": "Falsches Passwort. Bitte versuche es erneut."
+  },
+  "drawing": {
+    "tool_freehand": "Stift — Freihand",
+    "tool_line": "Gerade Linie",
+    "tool_rect": "Rechteck",
+    "tool_ellipse": "Kreis",
+    "color": "Farbe",
+    "width": "Strichstärke",
+    "tool_eraser": "Radierer (malt mit Hintergrundfarbe)",
+    "tool_eyedropper": "Pipette — Farbe vom Bild aufnehmen",
+    "tool_fill": "Farbeimer — verbundenen Bereich mit Farbe füllen",
+    "tool_text": "Text — auf die Leinwand klicken, um zu schreiben",
+    "clear": "Leeren",
+    "clear_hint": "Durch leeres Bild ersetzen",
+    "clear_title": "Durch leere Leinwand ersetzen?",
+    "clear_confirm": "Die gespeicherte PNG-Datei und alle Striche in dieser Sitzung werden durch ein weißes Bild ersetzt. Dies kann nicht rückgängig gemacht werden."
+  },
+  "media": {
+    "confirm_delete": "\"{{name}}\" löschen?",
+    "upload_failed": "Datei-Upload fehlgeschlagen",
+    "no_valid_files": "Keine gültigen Dateien gefunden. Unterstützt: {{formats}}"
+  },
+  "move": {
+    "failed_note": "Verschieben der Notiz fehlgeschlagen.",
+    "failed_folder": "Verschieben des Ordners fehlgeschlagen.",
+    "failed_media": "Verschieben der Mediendatei fehlgeschlagen."
+  },
+  "search": {
+    "previous": "Vorheriger (Umschalt+F3)",
+    "next": "Nächster (F3)",
+    "matches": "{{current}} von {{total}}",
+    "match_of": "Treffer {{current}} von {{total}}",
+    "result_singular": "Ergebnis",
+    "result_plural": "Ergebnisse",
+    "no_results": "Keine Notizen enthalten \"{{query}}\"",
+    "searching": "Suche nach \"{{query}}\"..."
+  },
+  "theme": {
+    "title": "Design"
+  },
+  "language": {
+    "title": "Sprache"
+  },
+  "syntax_highlight": {
+    "title": "Syntax-Highlighting",
+    "description": "Markdown-Syntax im Editor einfärben",
+    "enable": "Syntax-Highlighting aktivieren",
+    "disable": "Syntax-Highlighting deaktivieren"
+  },
+  "settings": {
+    "account": "Konto",
+    "logout": "Abmelden",
+    "readable_line_length": "Lesbare Zeilenlänge",
+    "readable_line_length_desc": "Vorschaubreite für bessere Lesbarkeit begrenzen",
+    "hide_underscore_folders": "Systemordner ausblenden",
+    "hide_underscore_folders_desc": "_attachments, _templates und andere Unterstrich-Ordner in der Seitenleiste und im Graphen ausblenden",
+    "tab_inserts_tab": "Tab-Taste fügt Tab ein",
+    "tab_inserts_tab_desc": "Tab drücken, um ein Tabulatorzeichen einzufügen statt den Fokus zu wechseln",
+    "new_button_action": "Wenn du auf + klickst",
+    "new_button_action_desc": "Umschalt+Klick zeigt immer die Auswahl.",
+    "new_button_option_chooser": "Auswahl anzeigen (Standard)",
+    "new_button_option_note": "Neue Notiz",
+    "new_button_option_folder": "Neuer Ordner",
+    "new_button_option_template": "Neue Notiz aus Vorlage",
+    "new_button_option_drawing": "Neue Zeichnung",
+    "auto_fill_note_title": "Titel mit Zeitstempel",
+    "auto_fill_note_title_desc": "jjjjmmttHHMMSS. Enter akzeptiert, Tippen ersetzt."
+  },
+  "homepage": {
+    "title": "Startseite",
+    "welcome": "Willkommen bei NoteDiscovery",
+    "get_started": "Erstelle etwas, um loszulegen",
+    "no_notes_title": "Noch keine Notizen",
+    "no_notes_desc": "Erstelle deine erste Notiz oder Ordner",
+    "folder_empty": "Dieser Ordner ist leer",
+    "note_singular": "Notiz",
+    "note_plural": "Notizen",
+    "folder_singular": "Ordner",
+    "folder_plural": "Ordner",
+    "view_cards": "Kartenansicht",
+    "view_list": "Listenansicht"
+  },
+  "format": {
+    "bold": "Fett",
+    "italic": "Kursiv",
+    "strikethrough": "Durchgestrichen",
+    "heading": "Überschrift",
+    "link": "Link",
+    "image": "Bild",
+    "code": "Inline-Code",
+    "codeblock": "Code-Block",
+    "quote": "Zitat",
+    "bullet_list": "Aufzählungsliste",
+    "numbered_list": "Nummerierte Liste",
+    "checkbox": "Kontrollkästchen",
+    "table": "Tabelle"
+  },
+  "validation": {
+    "forbidden_chars": "Der Name enthält unzulässige Zeichen: {{chars}}",
+    "reserved_name": "Dieser Name ist vom Betriebssystem reserviert.",
+    "invalid_dot": "Der Name darf nicht nur ein Punkt sein.",
+    "trailing_dot_space": "Der Name darf nicht mit einem Punkt oder Leerzeichen enden."
+  },
+  "support": {
+    "enjoying_demo": "Unterstütze dieses Projekt",
+    "deploy_own": "Eigene Instanz bereitstellen",
+    "thank_you": "Danke für deine Unterstützung! 💚"
+  },
+  "demo": {
+    "title": "DEMO-MODUS",
+    "warning": "Inhalte werden täglich zurückgesetzt. Änderungen können von anderen Benutzern überschrieben werden."
+  }
+}

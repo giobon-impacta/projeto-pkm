@@ -1,0 +1,345 @@
+{
+  "_meta": {
+    "code": "hu-HU",
+    "name": "Magyar",
+    "flag": "🇭🇺"
+  },
+  "app": {
+    "tagline": "A Saját, Önálló Tudásbázisod"
+  },
+  "common": {
+    "save": "Mentés",
+    "cancel": "Mégse",
+    "delete": "Törlés",
+    "rename": "Átnevez",
+    "create": "Létrehoz",
+    "close": "Bezár",
+    "confirm_title": "Megerősítés",
+    "yes": "✓ Igen",
+    "no": "✗ Nem",
+    "ok": "OK",
+    "error": "Hiba",
+    "loading": "Betöltés...",
+    "saved": "✓ Mentve",
+    "saving": "Mentés...",
+    "copied": "Másolva!",
+    "copy_to_clipboard": "Másolás",
+    "failed": "Hiba a(z) {{action}} során. Kérlek, próbáld újra."
+  },
+  "toast": {
+    "region_label": "Értesítések",
+    "dismiss": "Bezárás"
+  },
+  "sidebar": {
+    "title": "FÁJLOK",
+    "favorites_title": "Kedvencek",
+    "folders_and_notes": "Mappák & Jegyzetek",
+    "new_button": "+ Új",
+    "new_note": "Új Jegyzet",
+    "new_folder": "Új Mappa",
+    "new_from_template": "Új Sablonból",
+    "new_drawing": "Új rajz",
+    "rename_folder": "Mappa átnevezése",
+    "delete_folder": "Mappa törlése",
+    "search_placeholder": "Jegyzetek keresése...",
+    "search_hint": "Írj a jegyzetek kereséséhez",
+    "clear_search": "Keresés törlése",
+    "drag_hint": "💡 Húzás=Mozgatás",
+    "root_folder": "📂 Gyökér mappa",
+    "no_notes": "Még nincsenek jegyzetek. Hozd létre az első jegyzeted!",
+    "no_notes_yet": "Még nincsenek jegyzetek vagy mappák.",
+    "create_first": "Hozd létre az első jegyzeted vagy mappád!",
+    "loading_notes": "Jegyzetek betöltése…",
+    "no_favorites": "Még nincsenek kedvencek",
+    "no_results": "Nincs találat",
+    "expand_all": "Mappák kibontása",
+    "collapse_all": "Mappák összecsukása",
+    "sort_a-z": "Rendezés A-Z",
+    "sort_z-a": "Rendezés Z-A",
+    "sort_newest": "Legújabb elöl (csak fájlok)",
+    "sort_oldest": "Legrégebbi elöl (csak fájlok)",
+    "sort_largest": "Legnagyobb elöl (csak fájlok)",
+    "sort_smallest": "Legkisebb elöl (csak fájlok)",
+    "toggle_sidebar": "Oldalsáv megjelenítése",
+    "go_to_homepage": "Ugrás a kezdőlapra",
+    "hide_panel": "Oldalsáv elrejtése",
+    "show_panel": "Oldalsáv megjelenítése",
+    "files": "Fájlok",
+    "search": "Keresés",
+    "search_title": "KERESÉS",
+    "settings": "Beállítások",
+    "settings_title": "BEÁLLÍTÁSOK",
+    "filtered_notes": "Szűrt jegyzetek"
+  },
+  "editor": {
+    "placeholder": "Kezdj el írni markdown-ban...",
+    "drop_hint": "💡 Beszúrás ide...",
+    "mode_edit": "Szerkesztés",
+    "mode_split": "Osztott nézet",
+    "mode_preview": "Előnézet",
+    "edited": "Szerkesztve {{time}}",
+    "just_now": "éppen most",
+    "minutes_ago": "{{count}} perce",
+    "hours_ago": "{{count}} órája",
+    "days_ago": "{{count}} napja",
+    "tasks_all_checked": "{{total}} feladatból {{changed}} bejelölve",
+    "tasks_all_unchecked": "{{total}} feladatból {{changed}} jelölése törölve"
+  },
+  "notes": {
+    "confirm_delete": "Biztos törlöd a következőt: \"{{name}}\"?",
+    "already_exists": "A(z) \"{{name}}\" nevű jegyzet már létezik.\nKérlek válassz egy másik nevet.",
+    "prompt_name": "Add meg a jegyzet nevét:",
+    "input_placeholder": "Jegyzet neve",
+    "prompt_name_in_folder": "Jegyzet létrehozása a következő mappában: \"{{folder}}\".",
+    "prompt_name_with_path": "A mappa/jegyzet formátummal beágyazott mappákba helyezheted a jegyzetet.",
+    "prompt_rename": "Adj új nevet:",
+    "invalid_name": "Érvénytelen jegyzetnév.",
+    "empty_name": "A jegyzet neve nem lehet üres.",
+    "not_found": "Nem található jegyzet: {{path}}",
+    "create_from_link": "Jegyzet a(z) \"{{path}}\" nemlétezik.\n\nSzeretnéd létrehozni?",
+    "no_content": "Nincs exportálható jegyzettartalom",
+    "open_first": "Kérlek előbb nyiss meg egy jegyzetet, mielőtt képeket töltenél fel.",
+    "save_conflict_title": "A jegyzet máshol módosult",
+    "save_conflict_message": "A(z) \"{{name}}\" jegyzet megváltozott a lemezen, mióta megnyitottad: egy másik lap, egy szinkronizáló eszköz vagy egy MI-ügynök írt bele.\n\nAz Újratöltés a lemezen lévő verziót mutatja; a nem mentett módosításaid elvesznek.\nA Felülírás a te verziódat menti az övék helyett.",
+    "save_conflict_overwrite": "Felülírás",
+    "save_conflict_reload": "Újratöltés",
+    "save_conflict_unsaved": "\"{{name}}\": a legutóbbi módosításaid nem lettek mentve, a jegyzet máshol módosult."
+  },
+  "folders": {
+    "confirm_delete": "⚠️ FIGYELMEZTETÉS ⚠️\n\nBiztosan törölni szeretnéd a(z) \"{{name}}\" mappát?\n\nEz VÉGLEGESEN törli a következőket:\n• A mappában található összes jegyzet\n• Az összes almappa és azok tartalma \n\nEz a művelet NEM vonható vissza!",
+    "already_exists": "A(z) \"{{name}}\" nevű mappa már létezik.\nKérlek válassz egy másik nevet.",
+    "prompt_name": "Add meg a mappa nevét:",
+    "folder_name": "Mappa neve",
+    "input_placeholder": "Mappa neve",
+    "prompt_name_in_folder": "Almappa létrehozása a \"{{folder}}\" mappában.",
+    "prompt_name_with_path": "Perjelekkel hozhatsz létre beágyazott mappákat (pl. „Projektek” vagy „Munka/2026”).",
+    "prompt_rename": "Nevezd át a(z) \"{{name}}\" mappát:",
+    "rename_modal_title": "Mappa átnevezése",
+    "rename_modal_description": "Add meg a(z) „{{name}}” mappa új nevét.",
+    "rename_modal_label": "Új név",
+    "invalid_name": "Érvénytelen mappanév.",
+    "cannot_move_into_self": "A mappa nem mozgatható saját magába vagy bármelyik almappájába.",
+    "empty": "üres"
+  },
+  "toolbar": {
+    "undo": "Visszavon (Ctrl+Z)",
+    "redo": "Helyrehoz (Ctrl+Y)",
+    "delete_note": "Jegyzet törlése",
+    "delete_image": "Kép törlése",
+    "delete_drawing": "Rajz törlése",
+    "export_html": "Exportálás HTML-ként",
+    "print_preview": "Nyomtatási előnézet",
+    "copy_link": "Link másolása",
+    "add_favorite": "Hozzáadás a kedvencekhez",
+    "remove_favorite": "Eltávolítás a kedvencek közül"
+  },
+  "zen_mode": {
+    "title": "Zen Mód",
+    "tooltip": "Zen Mód (Ctrl+Alt+Z)",
+    "exit": "Kilépés a Zen Módból",
+    "exit_hint": "Kilépés a Zen Módból (Esc)"
+  },
+  "share": {
+    "button_tooltip": "Jegyzet megosztása",
+    "modal_title": "Jegyzet Megosztása",
+    "not_shared_description": "Ez a jegyzet jelenleg nincs megosztva. Hozz létre egy linket, hogy megoszthasd bárkivel.",
+    "shared_description": "Bárki, aki rendelkezik ezzel a linkkel, megtekintheti ezt a jegyzetet:",
+    "create_link": "Megosztási Link Létrehozása",
+    "copy": "Másolás",
+    "stop_sharing": "Megosztás Leállítása",
+    "confirm_revoke": "Biztos leállítod a jegyzet a megosztását? A megosztási link többé nem fog működni.",
+    "error_creating": "Hiba történt a megosztási link létrehozásánál: {{error}}",
+    "error_revoking": "Nemsikerült visszavonni a megosztási linket: {{error}}",
+    "show_qr": "QR-Kód Megjelenítése",
+    "hide_qr": "QR-Kód Elrejtése",
+    "panel_title": "Megosztott",
+    "no_shared": "Nincs megosztott jegyzet",
+    "link_name": "Link neve",
+    "use_random_link": "Véletlenszerű link használata",
+    "custom_link_warning": "Aki kitalálja a nevet, megnyithatja a jegyzetet. Érzékeny tartalomhoz használj véletlenszerű linket.",
+    "slug_available": "A név szabad",
+    "slug_taken": "Ezt a nevet már egy másik link használja",
+    "slug_invalid_chars": "Csak betűk, számok, kötőjelek és alulvonások használhatók",
+    "slug_too_short": "Legalább {{min}} karakter kell",
+    "slug_too_long": "Legfeljebb {{max}} karakter lehet",
+    "update_link": "Link Frissítése",
+    "link_not_saved": "nincs mentve",
+    "confirm_slug_change": "Biztos megváltoztatod a link nevét? A jelenlegi megosztási link azonnal érvénytelen lesz.",
+    "error_updating": "Nem sikerült frissíteni a megosztási linket: {{error}}"
+  },
+  "quick_switcher": {
+    "placeholder": "Írj a jegyzetek kereséséhez...",
+    "no_results": "Nincs találat",
+    "recent_hint": "Legutóbbi jegyzetek. Írj a kereséshez.",
+    "navigate": "Átvált",
+    "open": "nyit",
+    "close": "csuk"
+  },
+  "tags": {
+    "title": "Címkék",
+    "no_tags": "Nem találhatók címkék",
+    "hint": "Hozz létre címkéket YAML frontmatter-ben",
+    "no_matches": "Nem található jegyzet a kiválasztott címkéhez",
+    "clear_all": "Szűrők törlése",
+    "filter_by": "Szűrés {{tag}} ({{count}} jegyzetek)"
+  },
+  "outline": {
+    "title": "Fejlécek",
+    "no_headings": "Nincsenek fejlécek",
+    "hint": "Fejléc hozzáadása a következővel: # "
+  },
+  "backlinks": {
+    "title": "Bejövő linkek",
+    "no_backlinks": "Nincsenek bejövő linkek",
+    "hint": "Más jegyzetek itt jelennek meg, ha hivatkoznak erre a jegyzetre",
+    "select_note": "Válassz ki egy jegyzetet a bejövő linkek megtekintéséhez",
+    "more_refs": "továbbiak"
+  },
+  "stats": {
+    "words": "szavak",
+    "reading_time": "~{{minutes}} percnyi olvasás",
+    "links": "{{count}} hivatkozások",
+    "click_details": "▼ Kattints a részletekért"
+  },
+  "graph": {
+    "title": "Grafikon nézet",
+    "empty": "Nincsenek megjeleníthető kapcsolatok",
+    "markdown_links": "Markdown hivatkozások",
+    "click_hint": "Kattints: kiválasztás • Dupla kattintás: megnyitás"
+  },
+  "templates": {
+    "title": "Sablonok",
+    "select": "Válassz egy sablont...",
+    "prompt_name": "Add meg a jegyzet nevét:",
+    "no_templates": "Nem találhatók sablonok. Hozz létre sablonokat a _templates mappában.",
+    "create_failed": "Hiba a sablonból való jegyzet létrehozásánál",
+    "create_from_template": "Létrehozás sablonból",
+    "select_template": "Sablon Kiválasztása",
+    "choose_template": "Válassz egy sablont",
+    "note_name": "Jegyzet Neve",
+    "available_placeholders": "Elérhető helyőrzők",
+    "create_note": "Jegyzet létrehozása"
+  },
+  "export": {
+    "failed": "Hiba a HTML exportálása során: {{error}}"
+  },
+  "login": {
+    "title": "Bejelentkezés",
+    "tagline": "A Saját, Önálló Tudásbázisod",
+    "password_placeholder": "Add meg a jelszavad",
+    "unlock_button": "🔓 Kinyit",
+    "footer": "🔒 Biztonságos & Saját Kiszolgálású",
+    "error_incorrect_password": "Helytelen jelszó. Próbáld újra."
+  },
+  "drawing": {
+    "tool_freehand": "Ceruza — szabadkézi",
+    "tool_line": "Egyenes vonal",
+    "tool_rect": "Téglalap",
+    "tool_ellipse": "Kör",
+    "color": "Szín",
+    "width": "Vonalvastagság",
+    "tool_eraser": "Radír (háttérszínnel fest)",
+    "tool_eyedropper": "Pipetta — szín mintavétele a vászonról",
+    "tool_fill": "Festékesvödör — összefüggő terület kitöltése színnel",
+    "tool_text": "Szöveg — kattints a vászonra a szöveg hozzáadásához.",
+    "clear": "Törlés",
+    "clear_hint": "Üres képre cserélés",
+    "clear_title": "Lecseréled üres vászonra?",
+    "clear_confirm": "A jelenlegi PNG és ebben a munkamenetben lévő összes rajz törlődik, és egy üres, fehér képpel lesz helyettesítve. Ez a művelet nem vonható vissza."
+  },
+  "media": {
+    "confirm_delete": "Biztos törlöd a következőt:  \"{{name}}\"?",
+    "upload_failed": "Hiba a fájl feltöltése során",
+    "no_valid_files": "Nem található érvényes fájl. Támogatott formátumok: {{formats}}"
+  },
+  "move": {
+    "failed_note": "Hiba a jegyzet mozgatásánál.",
+    "failed_folder": "Hiba a mappa mozgatásánál.",
+    "failed_media": "Hiba a médiafájl mozgatásánál."
+  },
+  "search": {
+    "previous": "Előző (Shift+F3)",
+    "next": "Következő (F3)",
+    "matches": "{{current}} / {{total}}",
+    "match_of": "Megfelelő {{current}} / {{total}}",
+    "result_singular": "eredmény",
+    "result_plural": "eredmény",
+    "no_results": "Nincs jegyzet amely tartalmazza a következőt: \"{{query}}\"",
+    "searching": "\"{{query}}\" keresése..."
+  },
+  "theme": {
+    "title": "Téma"
+  },
+  "language": {
+    "title": "Nyelv"
+  },
+  "syntax_highlight": {
+    "title": "Szintaxisok kiemelése",
+    "description": "Markdown szintaxisok színezése",
+    "enable": "Szintaxiskiemelések engedélyezése",
+    "disable": "Szintaxiskiemelések letiltása"
+  },
+  "settings": {
+    "account": "Fiók",
+    "logout": "Kijelentkezés",
+    "readable_line_length": "Olvasható sorhossz",
+    "readable_line_length_desc": "Korlátozd az előnézeti szélességet a könnyebb olvasás érdekében",
+    "hide_underscore_folders": "Rendszermappák elrejtése",
+    "hide_underscore_folders_desc": "_attachments, _templates és más aláhúzásos mappák elrejtése az oldalsávról és a gráfról",
+    "tab_inserts_tab": "Tab billentyű több helyet hagy a szövegben",
+    "tab_inserts_tab_desc": "Nyomd meg a Tab-ot, hogy több helyet hagyj a szövegben a fókuszváltás helyett",
+    "new_button_action": "A + gombra kattintva",
+    "new_button_action_desc": "Shift+kattintás mindig az opciókat mutatjat.",
+    "new_button_option_chooser": "Opciók megjelenítése (alapértelmezett)",
+    "new_button_option_note": "Új jegyzet",
+    "new_button_option_folder": "Új mappa",
+    "new_button_option_template": "Új jegyzet sablonból",
+    "new_button_option_drawing": "Új rajz",
+    "auto_fill_note_title": "Cím kitöltése időbélyeggel",
+    "auto_fill_note_title_desc": "éééé.hh.nn.ÓÓ.PP.MM."
+  },
+  "homepage": {
+    "title": "Főoldal",
+    "welcome": "Üdvözöllek a NoteDiscovery-ben",
+    "get_started": "Hozz létre valamit a kezdéshez",
+    "no_notes_title": "Még nincsenek jegyzetek",
+    "no_notes_desc": "Hozd létre az első jegyzeted vagy mappád",
+    "folder_empty": "Ez a mappa üres",
+    "note_singular": "jegyzet",
+    "note_plural": "jegyzet",
+    "folder_singular": "mappa",
+    "folder_plural": "mappa",
+    "view_cards": "Kártyanézet",
+    "view_list": "Listanézet"
+  },
+  "format": {
+    "bold": "Félkövér",
+    "italic": "Dőlt",
+    "strikethrough": "Áthúzott",
+    "heading": "Fejléc",
+    "link": "Link",
+    "image": "Kép",
+    "code": "Beágyazott kód",
+    "codeblock": "Kódblokk",
+    "quote": "Idézet",
+    "bullet_list": "Pontozott lista",
+    "numbered_list": "Számozott lista",
+    "checkbox": "Jelölőnégyzet",
+    "table": "Táblázat"
+  },
+  "validation": {
+    "forbidden_chars": "A név tiltott karaktereket tartalmaz: {{chars}}",
+    "reserved_name": "Ezt a nevet az operációs rendszer tartja fenn.",
+    "invalid_dot": "A név nem állhat csak egy pontból.",
+    "trailing_dot_space": "A név nem végződhet ponttal vagy szóközzel."
+  },
+  "support": {
+    "enjoying_demo": "Támogasd ezt a projektet",
+    "deploy_own": "Saját példány telepítése",
+    "thank_you": "Köszönjük a támogatásodat! 💚"
+  },
+  "demo": {
+    "title": "DEMÓ MÓD",
+    "warning": "A tartalom naponta visszaáll. A módosításokat más felhasználók felülírhatják."
+  }
+}

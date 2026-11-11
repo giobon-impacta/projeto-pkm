@@ -1,0 +1,1285 @@
+import { ensureFrontmatterTags, highlightMarkdown, MarkdownEditor, stripFrontmatter } from './lib/markdown-editor.js';
+import { mapEditorToPreview, mapPreviewToEditor } from './lib/scroll-sync.js';
+
+const pageSize = 30;
+const treePageSize = 100;
+const state = {
+    mode: 'title',
+    folder: '',
+    offset: 0,
+    total: 0,
+    notes: [],
+    folders: [],
+    folderNotes: new Map(),
+    folderNotesLoading: new Set(),
+    folderNotesGeneration: 0,
+    expandedFolders: new Set(['']),
+    view: 'list',
+    noteID: null,
+    noteFolder: '',
+    savedDraft: null,
+    listState: null,
+    directEntry: false,
+    requestID: 0,
+    navigationID: 0,
+    searchTimer: null,
+    saveTimer: null,
+    savePromise: null
+};
+let editorSplitPercent = 50;
+
+const elements = {
+    searchView: document.querySelector('#searchView'),
+    editorView: document.querySelector('#editorView'),
+    searchInput: document.querySelector('#searchInput'),
+    notesList: document.querySelector('#notesList'),
+    resultCount: document.querySelector('#resultCount'),
+    resultsTitle: document.querySelector('#resultsTitle'),
+    pagination: document.querySelector('#pagination'),
+    pageStatus: document.querySelector('#pageStatus'),
+    previousPage: document.querySelector('#previousPage'),
+    nextPage: document.querySelector('#nextPage'),
+    panel: document.querySelector('#workspacePanel'),
+    panelTitle: document.querySelector('#panelTitle'),
+    panelContent: document.querySelector('#panelContent'),
+    noteTitle: document.querySelector('#noteTitle'),
+    noteContent: document.querySelector('#noteContent'),
+    sourceHighlight: document.querySelector('#sourceHighlight'),
+    markdownPreview: document.querySelector('#markdownPreview'),
+    editorWorkspace: document.querySelector('.editor-workspace'),
+    saveStatus: document.querySelector('#saveStatus'),
+    appMessage: document.querySelector('#appMessage'),
+    newNote: document.querySelector('#newNote'),
+    deleteCurrentNote: document.querySelector('#deleteCurrentNote')
+};
+
+let previewTimer;
+let previewRequestID = 0;
+let renderedPreviewMarkdown = '';
+let editorLinePositionCache = null;
+let scrollSyncFrame = 0;
+let pendingScrollSource = null;
+let programmaticScroll = null;
+const markdownEditor = new MarkdownEditor(elements.noteContent, () => {
+    updatePreview();
+    updateHighlight();
+    scheduleSave();
+}, updateEditorHistoryButtons);
+
+document.addEventListener('DOMContentLoaded', initialize);
+
+function startSplitResize(event) {
+    if (event.button !== 0 || !window.matchMedia('(min-width: 701px)').matches) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    document.body.classList.add('is-resizing-editor');
+    resizeSplit(event);
+}
+
+function resizeSplit(event) {
+    if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
+    const bounds = elements.editorWorkspace.getBoundingClientRect();
+    if (!bounds.width) return;
+    editorSplitPercent = Math.min(80, Math.max(20, ((event.clientX - bounds.left) / bounds.width) * 100));
+    updateSplitRatio();
+}
+
+function stopSplitResize(event) {
+    if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    document.body.classList.remove('is-resizing-editor');
+    localStorage.setItem('editorSplitPercent', String(Math.round(editorSplitPercent)));
+}
+
+function handleSplitResizeKey(event) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === 'Home') editorSplitPercent = 20;
+    else if (event.key === 'End') editorSplitPercent = 80;
+    else editorSplitPercent = Math.min(80, Math.max(20, editorSplitPercent + (event.key === 'ArrowRight' ? 5 : -5)));
+    updateSplitRatio();
+    localStorage.setItem('editorSplitPercent', String(Math.round(editorSplitPercent)));
+}
+
+function updateSplitRatio() {
+    const splitter = document.querySelector('.editor-splitter');
+    if (!splitter) return;
+    elements.editorWorkspace.style.setProperty('--editor-left', `${editorSplitPercent}fr`);
+    elements.editorWorkspace.style.setProperty('--editor-right', `${100 - editorSplitPercent}fr`);
+    splitter.setAttribute('aria-valuenow', String(Math.round(editorSplitPercent)));
+}
+
+function initialize() {
+    setupTheme();
+    setupEventListeners();
+    const savedSplit = Number(localStorage.getItem('editorSplitPercent'));
+    if (Number.isFinite(savedSplit)) editorSplitPercent = Math.min(80, Math.max(20, savedSplit));
+    updateSplitRatio();
+    if (window.matchMedia('(max-width: 700px)').matches) closePanel();
+    const initialListState = captureListState();
+    const noteParam = new URLSearchParams(location.search).get('note');
+    if (/^\d+$/.test(noteParam || '')) {
+        state.directEntry = true;
+        state.listState = initialListState;
+        history.replaceState({ view: 'editor', noteId: Number(noteParam), list: initialListState, direct: true }, '', location.href);
+        void openNote(Number(noteParam), { push: false });
+    } else {
+        history.replaceState({ view: 'list', list: initialListState }, '', location.href);
+        loadNotes();
+    }
+
+    loadFolders();
+    void loadFolderNotes('', false);
+}
+
+function setupEventListeners() {
+    document.querySelectorAll('.rail-button[data-panel]').forEach(button => {
+        button.addEventListener('click', () => togglePanel(button.dataset.panel));
+    });
+    document.querySelector('#homeButton').addEventListener('click', () => {
+        if (state.view === 'editor') navigateBack();
+        else elements.searchInput.focus();
+    });
+    document.querySelector('#closePanel').addEventListener('click', closePanel);
+    elements.newNote.addEventListener('click', () => openNewNote());
+    elements.deleteCurrentNote.addEventListener('click', deleteCurrentNote);
+    document.querySelector('#themeToggle').addEventListener('click', toggleTheme);
+    document.querySelector('#clearFolder').addEventListener('click', () => selectFolder(''));
+    elements.searchInput.addEventListener('input', () => {
+        window.clearTimeout(state.searchTimer);
+        state.offset = 0;
+        state.searchTimer = window.setTimeout(() => {
+            loadNotes();
+            updateListHistory();
+        }, 160);
+    });
+    document.querySelectorAll('[data-mode]').forEach(button => {
+        button.addEventListener('click', () => {
+            state.mode = button.dataset.mode;
+            updateSearchModes();
+            state.offset = 0;
+            loadNotes();
+            updateListHistory();
+        });
+    });
+    elements.previousPage.addEventListener('click', () => {
+        state.offset = Math.max(0, state.offset - pageSize);
+        loadNotes();
+        updateListHistory();
+    });
+    elements.nextPage.addEventListener('click', () => {
+        if (state.offset + pageSize < state.total) {
+            state.offset += pageSize;
+            loadNotes();
+            updateListHistory();
+        }
+    });
+    elements.panelContent.addEventListener('click', handlePanelClick);
+    elements.panelContent.addEventListener('dragstart', handleSidebarDragStart);
+    elements.panelContent.addEventListener('dragend', clearDropTargets);
+    elements.panelContent.addEventListener('dragover', handleSidebarDragOver);
+    elements.panelContent.addEventListener('dragleave', handleSidebarDragLeave);
+    elements.panelContent.addEventListener('drop', event => void handleSidebarDrop(event));
+    elements.notesList.addEventListener('click', handleNoteListClick);
+    elements.noteContent.addEventListener('input', () => markdownEditor.handleInput());
+    elements.noteContent.addEventListener('keydown', event => markdownEditor.handleKeydown(event));
+    elements.noteContent.addEventListener('scroll', () => handleEditorScroll(elements.noteContent));
+    elements.markdownPreview.addEventListener('scroll', () => handleEditorScroll(elements.markdownPreview));
+    window.addEventListener('resize', () => {
+        editorLinePositionCache = null;
+        syncEditorScrollFromSource();
+    });
+    elements.noteTitle.addEventListener('input', scheduleSave);
+    const splitter = document.querySelector('.editor-splitter');
+    splitter.addEventListener('pointerdown', startSplitResize);
+    splitter.addEventListener('pointermove', resizeSplit);
+    splitter.addEventListener('pointerup', stopSplitResize);
+    splitter.addEventListener('pointercancel', stopSplitResize);
+    splitter.addEventListener('keydown', handleSplitResizeKey);
+    document.querySelector('.markdown-tools').addEventListener('click', event => {
+        const action = event.target.closest('[data-action]');
+        if (action?.dataset.action === 'undo') markdownEditor.undo();
+        if (action?.dataset.action === 'redo') markdownEditor.redo();
+        const button = event.target.closest('[data-format]');
+        if (button) markdownEditor.format(button.dataset.format);
+    });
+    document.querySelector('#saveNow').addEventListener('click', () => void flushSave());
+    document.querySelectorAll('[data-editor-mode]').forEach(button => {
+        button.addEventListener('click', () => setEditorMode(button.dataset.editorMode));
+    });
+    window.addEventListener('popstate', event => void handlePopState(event));
+    document.addEventListener('keydown', event => {
+        if (event.key === '/' && state.view === 'list' && !isTypingTarget(event.target)) {
+            event.preventDefault();
+            elements.searchInput.focus();
+        }
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') {
+            event.preventDefault();
+            void openNewNote();
+        }
+        if (state.view === 'editor' && event.key === 'Escape' && !event.defaultPrevented) {
+            navigateBack();
+        }
+    });
+}
+
+function isTypingTarget(target) {
+    return target instanceof HTMLElement &&
+        (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+}
+
+function captureListState() {
+    return {
+        query: elements.searchInput.value,
+        mode: state.mode,
+        folder: state.folder,
+        offset: state.offset
+    };
+}
+
+function updateListHistory() {
+    if (state.view === 'list') {
+        history.replaceState({ view: 'list', list: captureListState() }, '', location.href);
+    }
+}
+
+function updateSearchModes() {
+    document.querySelectorAll('[data-mode]').forEach(button => {
+        const active = button.dataset.mode === state.mode;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', String(active));
+    });
+}
+
+async function loadNotes() {
+    const requestID = ++state.requestID;
+    const query = elements.searchInput.value.trim();
+    const params = new URLSearchParams({
+        folder: state.folder,
+        limit: String(pageSize),
+        offset: String(state.offset)
+    });
+    const endpoint = query ? '/api/search' : '/api/notes';
+    if (query) {
+        params.set('q', query);
+        params.set('mode', state.mode);
+    }
+    try {
+        const page = await requestJSON(`${endpoint}?${params}`);
+        if (requestID !== state.requestID) return;
+        state.notes = page.items;
+        state.total = page.total;
+        renderNotes(page);
+    } catch (error) {
+        if (requestID === state.requestID) showMessage(`Não foi possível carregar as notas: ${error.message}`, 'error');
+    }
+}
+
+async function loadFolders() {
+    try {
+        state.folders = await requestJSON('/api/folders');
+        if (!Array.isArray(state.folders)) throw new Error('resposta de pastas inválida');
+        if (elements.panel.dataset.panel === 'files') renderFolderPanel();
+    } catch (error) {
+        showMessage(`Não foi possível carregar as pastas: ${error.message}`, 'error');
+    }
+}
+
+async function loadFolderNotes(folder, more = false) {
+    const previous = state.folderNotes.get(folder);
+    if (!more && previous) return;
+    if (state.folderNotesLoading.has(folder)) return;
+    const generation = state.folderNotesGeneration;
+    const offset = more && previous ? previous.items.length : 0;
+    const params = new URLSearchParams({ folder, limit: String(treePageSize), offset: String(offset) });
+    state.folderNotesLoading.add(folder);
+    try {
+        const page = await requestJSON(`/api/folder-notes?${params}`);
+        if (generation !== state.folderNotesGeneration) return;
+        const items = more && previous ? [...previous.items, ...page.items] : page.items;
+        state.folderNotes.set(folder, { items, total: page.total });
+        if (elements.panel.dataset.panel === 'files') renderFolderPanel();
+    } catch (error) {
+        showMessage(`Não foi possível carregar as notas da pasta: ${error.message}`, 'error');
+    } finally {
+        state.folderNotesLoading.delete(folder);
+        if (generation !== state.folderNotesGeneration && state.expandedFolders.has(folder)) {
+            void loadFolderNotes(folder);
+        }
+    }
+}
+
+function renderNotes(page) {
+    elements.notesList.replaceChildren();
+    const query = elements.searchInput.value.trim();
+    elements.resultsTitle.textContent = query
+        ? `Resultados para “${query}”`
+        : state.folder ? state.folder.split('/').at(-1) : 'Todas as notas';
+    elements.resultCount.textContent = `${page.total} ${page.total === 1 ? 'nota' : 'notas'}`;
+    if (state.view === 'list') {
+        document.querySelector('#currentFolder').textContent = state.folder || 'Todas as notas';
+    }
+    document.querySelector('#clearFolder').hidden = !state.folder;
+    if (page.items.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = query ? 'Nenhuma nota corresponde à pesquisa.' : 'Ainda não há notas. Crie uma para começar.';
+        elements.notesList.append(empty);
+    } else {
+        const contentSearch = Boolean(query && state.mode === 'content');
+        for (const note of page.items) elements.notesList.append(createNoteCard(note, contentSearch));
+    }
+    const first = page.total === 0 ? 0 : page.offset + 1;
+    const last = Math.min(page.offset + page.items.length, page.total);
+    elements.pagination.hidden = page.total <= page.limit;
+    elements.pageStatus.textContent = `${first}–${last} de ${page.total}`;
+    elements.previousPage.disabled = page.offset === 0;
+    elements.nextPage.disabled = page.offset + page.limit >= page.total;
+}
+
+function createNoteCard(note, contentSearch) {
+    const card = document.createElement('article');
+    card.className = `note-card${contentSearch ? ' is-content-result' : ''}`;
+    card.dataset.noteId = String(note.id);
+    const main = document.createElement('button');
+    main.className = 'note-card-main';
+    main.type = 'button';
+    main.dataset.action = 'open';
+    const title = document.createElement('span');
+    title.className = 'note-title';
+    title.textContent = note.title;
+    main.append(title);
+    if (contentSearch) {
+        const preview = document.createElement('span');
+        preview.className = 'note-preview';
+        appendHighlightedPreview(preview, note.preview || 'Nenhum trecho disponível.');
+        main.append(preview);
+    }
+    const info = document.createElement('div');
+    info.className = 'note-meta';
+    if (note.folder) {
+        const folder = document.createElement('span');
+        folder.className = 'note-folder';
+        folder.textContent = note.folder;
+        info.append(folder);
+    }
+    const tags = document.createElement('div');
+    tags.className = 'note-tags';
+    for (const value of note.tags || []) {
+        const tag = document.createElement('span');
+        tag.className = 'note-tag';
+        tag.textContent = `#${value}`;
+        tags.append(tag);
+    }
+    info.append(tags);
+    const actions = document.createElement('div');
+    actions.className = 'note-actions';
+    const remove = document.createElement('button');
+    remove.className = 'icon-button danger-hover';
+    remove.type = 'button';
+    remove.dataset.action = 'delete';
+    remove.setAttribute('aria-label', `Excluir ${note.title}`);
+    remove.title = 'Excluir';
+    remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg>';
+    actions.append(remove);
+    card.append(main, info, actions);
+    return card;
+}
+
+function appendHighlightedPreview(container, text) {
+    const startMarker = '<mark>';
+    const endMarker = '</mark>';
+    let remaining = text;
+    while (remaining) {
+        const start = remaining.indexOf(startMarker);
+        if (start < 0) {
+            container.append(document.createTextNode(remaining));
+            break;
+        }
+        if (start > 0) container.append(document.createTextNode(remaining.slice(0, start)));
+        const contentStart = start + startMarker.length;
+        const end = remaining.indexOf(endMarker, contentStart);
+        if (end < 0) {
+            container.append(document.createTextNode(remaining.slice(start)));
+            break;
+        }
+        const highlight = document.createElement('mark');
+        highlight.textContent = remaining.slice(contentStart, end);
+        container.append(highlight);
+        remaining = remaining.slice(end + endMarker.length);
+    }
+}
+
+function handleNoteListClick(event) {
+    const action = event.target.closest('[data-action]');
+    const card = event.target.closest('[data-note-id]');
+    if (!card || !action) return;
+    const id = Number(card.dataset.noteId);
+    if (action.dataset.action === 'open') void openNote(id);
+    else if (action.dataset.action === 'delete') void deleteNote(id);
+}
+
+async function openNewNote() {
+    if (state.view === 'editor' && !(await flushSave())) return;
+    if (state.view === 'list') state.listState = captureListState();
+    history.pushState({ view: 'editor', noteId: null, list: state.listState, direct: false }, '', location.pathname);
+    state.directEntry = false;
+    showEditor(null);
+}
+
+async function openNote(id, { push = true } = {}) {
+    if (state.view === 'editor' && !(await flushSave())) return;
+    const navigationID = ++state.navigationID;
+    let listState = state.view === 'editor' ? state.listState : captureListState();
+    try {
+        const note = await requestJSON(`/api/notes/${id}`);
+        if (navigationID !== state.navigationID) return;
+        state.listState = listState;
+        if (push) {
+            history.pushState({ view: 'editor', noteId: id, list: listState, direct: false }, '', `?note=${id}`);
+            state.directEntry = false;
+        }
+        showEditor(note);
+    } catch (error) {
+        showMessage(`Não foi possível abrir a nota: ${error.message}`, 'error');
+    }
+}
+
+function showEditor(note) {
+    window.clearTimeout(state.saveTimer);
+    state.view = 'editor';
+    state.noteID = note?.id ?? null;
+    elements.searchView.hidden = true;
+    elements.editorView.hidden = false;
+    elements.newNote.hidden = true;
+    elements.noteTitle.value = note?.title || '';
+    state.noteFolder = note ? note.folder : state.folder;
+    elements.deleteCurrentNote.hidden = !note;
+    elements.saveStatus.className = 'save-status';
+    elements.saveStatus.textContent = note ? 'Salvo' : 'Rascunho';
+    const content = note ? ensureFrontmatterTags(note.content, note.tags || []) : '';
+    renderedPreviewMarkdown = '';
+    editorLinePositionCache = null;
+    elements.noteContent.value = content;
+    state.savedDraft = getDraft();
+    markdownEditor.setValue(content);
+    setEditorMode('split');
+    updatePreview();
+    elements.noteContent.focus();
+    document.querySelector('#currentFolder').textContent = note ? (note.folder || 'Sem pasta') : (state.folder || 'Nova nota');
+}
+
+function getDraft() {
+    return {
+        title: elements.noteTitle.value,
+        folder: state.noteFolder,
+        content: elements.noteContent.value
+    };
+}
+
+function isDraftDirty(draft = getDraft()) {
+    return JSON.stringify(draft) !== JSON.stringify(state.savedDraft);
+}
+
+function scheduleSave() {
+    if (state.view !== 'editor') return;
+    if (!isDraftDirty()) {
+        setSaveStatus(state.noteID ? 'Salvo' : 'Rascunho', '');
+        return;
+    }
+    setSaveStatus(state.savePromise ? 'Salvando…' : 'Alterações pendentes', 'pending');
+    window.clearTimeout(state.saveTimer);
+    state.saveTimer = window.setTimeout(() => void persistDraft(), 650);
+}
+
+async function persistDraft() {
+    if (state.savePromise) {
+        await state.savePromise;
+        return isDraftDirty() ? persistDraft() : true;
+    }
+    const draft = getDraft();
+    if (!isDraftDirty(draft)) return true;
+    const note = {
+        title: draft.title.trim(),
+        folder: draft.folder,
+        content: draft.content
+    };
+    if (!note.title) {
+        setSaveStatus('Informe um título para salvar', 'error');
+        return false;
+    }
+    const id = state.noteID;
+    const endpoint = id === null ? '/api/notes' : `/api/notes/${id}`;
+    const method = id === null ? 'POST' : 'PUT';
+    setSaveStatus('Salvando…', 'pending');
+    const job = (async () => {
+        try {
+            const saved = await requestJSON(endpoint, { method, body: JSON.stringify(note) });
+            if (id === null) {
+                state.noteID = saved.id;
+                elements.deleteCurrentNote.hidden = false;
+                const current = history.state || {};
+                history.replaceState({ ...current, view: 'editor', noteId: saved.id, list: state.listState }, '', `?note=${saved.id}`);
+            }
+            if (JSON.stringify(getDraft()) === JSON.stringify(draft)) {
+                elements.noteTitle.value = saved.title;
+                state.noteFolder = saved.folder;
+                state.savedDraft = getDraft();
+            } else {
+                state.savedDraft = draft;
+            }
+            document.querySelector('#currentFolder').textContent = note.folder || 'Sem pasta';
+            setSaveStatus('Salvo automaticamente', 'saved');
+            state.folderNotesGeneration++;
+            state.folderNotes.clear();
+            void Promise.all([loadFolders(), loadNotes()]);
+            void loadFolderNotes('', false);
+            return true;
+        } catch (error) {
+            setSaveStatus(`Falha ao salvar: ${error.message}`, 'error');
+            return false;
+        }
+    })();
+    state.savePromise = job;
+    const result = await job;
+    state.savePromise = null;
+    if (result && isDraftDirty()) {
+        window.clearTimeout(state.saveTimer);
+        state.saveTimer = window.setTimeout(() => void persistDraft(), 0);
+    }
+    return result;
+}
+
+async function flushSave() {
+    window.clearTimeout(state.saveTimer);
+    while (state.savePromise) {
+        await state.savePromise;
+        if (state.savePromise) continue;
+    }
+    if (!isDraftDirty()) return true;
+    if (!elements.noteTitle.value.trim()) {
+        setSaveStatus('Informe um título antes de sair', 'error');
+        elements.noteTitle.focus();
+        return false;
+    }
+    const success = await persistDraft();
+    if (!success) return false;
+    if (isDraftDirty()) return flushSave();
+    return true;
+}
+
+function setSaveStatus(message, stateName) {
+    elements.saveStatus.textContent = message;
+    elements.saveStatus.dataset.state = stateName;
+    elements.saveStatus.className = `save-status${stateName ? ` is-${stateName}` : ''}`;
+}
+
+function navigateBack() {
+    if (state.view !== 'editor') return;
+    if (state.directEntry) {
+        void returnToList(state.listState || captureListState(), true);
+    } else {
+        history.back();
+    }
+}
+
+async function returnToList(listState, replace = false) {
+    if (!(await flushSave())) return;
+    const target = listState || { query: '', mode: 'title', folder: '', offset: 0 };
+    if (replace) history.replaceState({ view: 'list', list: target }, '', location.pathname);
+    state.view = 'list';
+    state.noteID = null;
+    state.directEntry = false;
+    restoreListState(target);
+    elements.editorView.hidden = true;
+    elements.searchView.hidden = false;
+    elements.newNote.hidden = false;
+    await loadNotes();
+    if (elements.panel.dataset.panel === 'search') elements.searchInput.focus();
+}
+
+function restoreListState(listState) {
+    elements.searchInput.value = listState.query || '';
+    state.mode = listState.mode || 'title';
+    state.folder = listState.folder || '';
+    state.offset = listState.offset || 0;
+    updateSearchModes();
+    document.querySelector('#currentFolder').textContent = state.folder || 'Todas as notas';
+}
+
+async function handlePopState(event) {
+    const target = event.state || { view: 'list', list: state.listState };
+    if (state.view === 'editor' && !(await flushSave())) {
+        history.forward();
+        return;
+    }
+    if (target.view === 'editor' && target.noteId) {
+        try {
+            const note = await requestJSON(`/api/notes/${target.noteId}`);
+            state.listState = target.list || state.listState || captureListState();
+            state.directEntry = false;
+            showEditor(note);
+        } catch (error) {
+            showMessage(`Não foi possível abrir a nota: ${error.message}`, 'error');
+            history.forward();
+        }
+        return;
+    }
+    if (target.view === 'editor') {
+        state.listState = target.list || state.listState || captureListState();
+        state.directEntry = Boolean(target.direct);
+        showEditor(null);
+        return;
+    }
+    state.listState = target.list || state.listState;
+    state.directEntry = false;
+    restoreListState(state.listState || {});
+    state.view = 'list';
+    state.noteID = null;
+    elements.editorView.hidden = true;
+    elements.searchView.hidden = false;
+    elements.newNote.hidden = false;
+    await loadNotes();
+    if (elements.panel.dataset.panel === 'search') elements.searchInput.focus();
+}
+
+async function deleteCurrentNote() {
+    if (state.noteID === null) return;
+    if (!window.confirm(`Excluir “${elements.noteTitle.value}”? Essa ação não pode ser desfeita.`)) return;
+    try {
+        await requestJSON(`/api/notes/${state.noteID}`, { method: 'DELETE' });
+        state.savedDraft = getDraft();
+        showMessage('Nota excluída.', 'success');
+        state.noteID = null;
+        state.folderNotesGeneration++;
+        state.folderNotes.clear();
+        navigateBack();
+        void Promise.all([loadFolders(), loadNotes()]);
+        void loadFolderNotes('', false);
+    } catch (error) {
+        setSaveStatus(`Não foi possível excluir: ${error.message}`, 'error');
+    }
+}
+
+async function deleteNote(id) {
+    const note = state.notes.find(item => item.id === id) ||
+        [...state.folderNotes.values()].flatMap(page => page.items).find(item => item.id === id);
+    if (!window.confirm(`Excluir “${note?.title || 'esta nota'}”? Essa ação não pode ser desfeita.`)) return;
+    try {
+        await requestJSON(`/api/notes/${id}`, { method: 'DELETE' });
+        state.total = Math.max(0, state.total - 1);
+        if (state.offset > 0 && state.offset >= state.total) state.offset = Math.max(0, state.offset - pageSize);
+        showMessage('Nota excluída.', 'success');
+        await Promise.all([loadNotes(), loadFolders()]);
+        state.folderNotesGeneration++;
+        state.folderNotes.clear();
+        await loadFolderNotes('', false);
+    } catch (error) {
+        showMessage(`Não foi possível excluir a nota: ${error.message}`, 'error');
+    }
+}
+
+function updatePreview() {
+    const requestID = ++previewRequestID;
+    window.clearTimeout(previewTimer);
+    const markdown = stripFrontmatter(elements.noteContent.value);
+    if (!markdown.trim()) {
+        elements.markdownPreview.textContent = '';
+        renderedPreviewMarkdown = markdown;
+        editorLinePositionCache = null;
+        syncEditorScrollFromSource();
+        return;
+    }
+    previewTimer = window.setTimeout(async () => {
+        try {
+            const response = await fetch('/api/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+                body: markdown
+            });
+            if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
+            const html = await response.text();
+            if (requestID === previewRequestID) {
+                elements.markdownPreview.innerHTML = html;
+                renderedPreviewMarkdown = markdown;
+                annotatePreviewLandmarks(markdown);
+                syncEditorScrollFromSource();
+            }
+        } catch (error) {
+            if (requestID === previewRequestID) {
+                elements.markdownPreview.textContent = `Falha ao renderizar Markdown: ${error.message}`;
+                renderedPreviewMarkdown = '';
+            }
+        }
+    }, 140);
+}
+
+function updateHighlight() {
+    elements.sourceHighlight.innerHTML = `${highlightMarkdown(elements.noteContent.value)}\n`;
+}
+
+function syncHighlightScroll() {
+    elements.sourceHighlight.scrollTop = elements.noteContent.scrollTop;
+    elements.sourceHighlight.scrollLeft = elements.noteContent.scrollLeft;
+}
+
+function scanMarkdownLandmarks(markdown) {
+    const lines = markdown.split('\n');
+    const landmarks = [];
+    let fence = null;
+    let inTable = false;
+    for (let index = 0; index < lines.length; index++) {
+        const line = lines[index];
+        const fenceMatch = line.match(/^ {0,3}(```+|~~~+)/);
+        if (fence) {
+            if (fenceMatch && fenceMatch[1][0] === fence.character && fenceMatch[1].length >= fence.length) {
+                fence = null;
+            }
+            continue;
+        }
+        if (fenceMatch) {
+            fence = { character: fenceMatch[1][0], length: fenceMatch[1].length };
+            landmarks.push({ line: index, kind: 'pre' });
+            inTable = false;
+            continue;
+        }
+        const heading = line.match(/^ {0,3}(#{1,6})\s+/);
+        if (heading) {
+            landmarks.push({ line: index, kind: `h${heading[1].length}` });
+            inTable = false;
+            continue;
+        }
+        if (index > 0 && /^ {0,3}(=+|-+)\s*$/.test(line) && lines[index - 1].trim()) {
+            landmarks.push({ line: index - 1, kind: line.trim()[0] === '=' ? 'h1' : 'h2' });
+            inTable = false;
+            continue;
+        }
+        if (/^ {0,3}(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,})$/.test(line)) {
+            landmarks.push({ line: index, kind: 'hr' });
+            inTable = false;
+            continue;
+        }
+        if (/^\s*!\[[^\]]*\]\([^)]+\)\s*$/.test(line)) {
+            landmarks.push({ line: index, kind: 'img' });
+            inTable = false;
+            continue;
+        }
+        const tableLine = /^\s*\|.*\|\s*$/.test(line);
+        if (tableLine && !inTable) landmarks.push({ line: index, kind: 'table' });
+        inTable = tableLine;
+    }
+    return landmarks;
+}
+
+function previewBlockKind(element) {
+    if (/^H[1-6]$/.test(element.tagName)) return element.tagName.toLowerCase();
+    if (element.tagName === 'PRE') return 'pre';
+    if (element.tagName === 'HR') return 'hr';
+    if (element.tagName === 'TABLE') return 'table';
+    if (element.tagName === 'IMG' ||
+        (element.tagName === 'P' && element.childNodes.length === 1 && element.firstElementChild?.tagName === 'IMG')) return 'img';
+    return null;
+}
+
+function annotatePreviewLandmarks(markdown) {
+    const byKind = new Map();
+    for (const landmark of scanMarkdownLandmarks(markdown)) {
+        if (!byKind.has(landmark.kind)) byKind.set(landmark.kind, []);
+        byKind.get(landmark.kind).push(landmark);
+    }
+    const previewBlocks = [...elements.markdownPreview.children].map(element => ({
+        element,
+        kind: previewBlockKind(element)
+    }));
+    const previewByKind = new Map();
+    for (const block of previewBlocks) {
+        if (!block.kind) continue;
+        if (!previewByKind.has(block.kind)) previewByKind.set(block.kind, []);
+        previewByKind.get(block.kind).push(block.element);
+    }
+    for (const [kind, landmarks] of byKind) {
+        const blocks = previewByKind.get(kind) || [];
+        if (blocks.length !== landmarks.length) continue;
+        blocks.forEach((element, index) => element.dataset.sourceLine = String(landmarks[index].line));
+    }
+}
+
+function measureEditorLines(markdown, lines) {
+    const editor = elements.noteContent;
+    const computed = getComputedStyle(editor);
+    const cacheKey = [
+        markdown, editor.clientWidth, computed.fontFamily, computed.fontSize,
+        computed.fontWeight, computed.lineHeight, computed.letterSpacing,
+        computed.tabSize, computed.padding, [...lines].sort((a, b) => a - b).join(',')
+    ].join('|');
+    if (editorLinePositionCache?.key === cacheKey) return editorLinePositionCache.positions;
+
+    const mirror = document.createElement('div');
+    for (const property of [
+        'direction', 'fontFamily', 'fontStyle', 'fontVariant', 'fontWeight',
+        'fontStretch', 'fontSize', 'fontSizeAdjust', 'lineHeight',
+        'letterSpacing', 'wordSpacing', 'tabSize', 'textIndent', 'textAlign',
+        'textTransform', 'textDecoration'
+    ]) mirror.style[property] = computed[property];
+    const paddingLeft = parseFloat(computed.paddingLeft) || 0;
+    const paddingRight = parseFloat(computed.paddingRight) || 0;
+    mirror.style.boxSizing = 'content-box';
+    mirror.style.width = `${Math.max(0, editor.clientWidth - paddingLeft - paddingRight)}px`;
+    mirror.style.padding = computed.padding;
+    mirror.style.border = '0';
+    mirror.style.height = 'auto';
+    mirror.style.overflow = 'hidden';
+    mirror.style.position = 'absolute';
+    mirror.style.left = '-100000px';
+    mirror.style.top = '0';
+    mirror.style.visibility = 'hidden';
+    mirror.style.whiteSpace = 'pre-wrap';
+    mirror.style.wordWrap = 'break-word';
+    mirror.style.overflowWrap = 'break-word';
+    const wanted = new Set(lines);
+    const sourceLines = markdown.split('\n');
+    sourceLines.forEach((line, index) => {
+        if (wanted.has(index)) {
+            const marker = document.createElement('span');
+            marker.dataset.line = String(index);
+            marker.textContent = line || '\u200b';
+            mirror.append(marker);
+        } else {
+            mirror.append(document.createTextNode(line));
+        }
+        if (index < sourceLines.length - 1) mirror.append(document.createTextNode('\n'));
+    });
+    document.body.append(mirror);
+    const mirrorTop = mirror.getBoundingClientRect().top;
+    const positions = new Map([...mirror.querySelectorAll('[data-line]')].map(marker => [
+        Number(marker.dataset.line),
+        marker.getBoundingClientRect().top - mirrorTop
+    ]));
+    mirror.remove();
+    editorLinePositionCache = { key: cacheKey, positions };
+    return positions;
+}
+
+function getScrollLandmarks() {
+    const markdown = stripFrontmatter(elements.noteContent.value);
+    if (renderedPreviewMarkdown !== markdown) return [];
+    const editor = elements.noteContent;
+    const preview = elements.markdownPreview;
+    const editorScrollable = Math.max(0, editor.scrollHeight - editor.clientHeight);
+    const previewScrollable = Math.max(0, preview.scrollHeight - preview.clientHeight);
+    if (!editorScrollable || !previewScrollable) return [];
+    const sourceLines = [...elements.markdownPreview.querySelectorAll('[data-source-line]')]
+        .map(element => Number(element.dataset.sourceLine));
+    const positions = measureEditorLines(markdown, sourceLines);
+    const previewRect = preview.getBoundingClientRect();
+    return [...elements.markdownPreview.querySelectorAll('[data-source-line]')]
+        .map(element => {
+            const sourceY = positions.get(Number(element.dataset.sourceLine));
+            const previewTop = element.getBoundingClientRect().top - previewRect.top + preview.scrollTop;
+            return {
+                editorPct: Number.isFinite(sourceY) ? sourceY / editorScrollable : NaN,
+                previewTop
+            };
+        })
+        .filter(anchor => anchor.editorPct > 0 && anchor.editorPct < 1 &&
+            anchor.previewTop > 0 && anchor.previewTop < previewScrollable);
+}
+
+function handleEditorScroll(source) {
+    if (programmaticScroll?.element === source) {
+        const matched = Math.abs(source.scrollTop - programmaticScroll.scrollTop) < 1;
+        programmaticScroll = null;
+        if (matched) {
+            if (source === elements.noteContent) syncHighlightScroll();
+            return;
+        }
+    }
+    pendingScrollSource = source;
+    if (scrollSyncFrame) return;
+    scrollSyncFrame = requestAnimationFrame(() => {
+        scrollSyncFrame = 0;
+        const source = pendingScrollSource;
+        pendingScrollSource = null;
+        if (!source) return;
+        const landmarks = getScrollLandmarks();
+        const fromEditor = source === elements.noteContent;
+        const sourceScrollable = Math.max(0, source.scrollHeight - source.clientHeight);
+        const target = fromEditor ? elements.markdownPreview : elements.noteContent;
+        const targetScrollable = Math.max(0, target.scrollHeight - target.clientHeight);
+        const targetTop = fromEditor
+            ? mapEditorToPreview(source.scrollTop, sourceScrollable, targetScrollable, landmarks)
+            : mapPreviewToEditor(source.scrollTop, sourceScrollable, targetScrollable, landmarks);
+        if (Math.abs(target.scrollTop - targetTop) >= 1) {
+            programmaticScroll = { element: target, scrollTop: targetTop };
+            target.scrollTop = targetTop;
+        }
+        syncHighlightScroll();
+    });
+}
+
+function syncEditorScrollFromSource() {
+    syncHighlightScroll();
+    const editor = elements.noteContent;
+    const preview = elements.markdownPreview;
+    const targetTop = mapEditorToPreview(
+        editor.scrollTop,
+        Math.max(0, editor.scrollHeight - editor.clientHeight),
+        Math.max(0, preview.scrollHeight - preview.clientHeight),
+        getScrollLandmarks()
+    );
+    if (Math.abs(preview.scrollTop - targetTop) >= 1) {
+        programmaticScroll = { element: preview, scrollTop: targetTop };
+        preview.scrollTop = targetTop;
+    }
+}
+
+function updateEditorHistoryButtons({ canUndo, canRedo }) {
+    document.querySelector('[data-action="undo"]').disabled = !canUndo;
+    document.querySelector('[data-action="redo"]').disabled = !canRedo;
+}
+
+function setEditorMode(mode) {
+    elements.editorWorkspace.dataset.editorMode = mode;
+    document.querySelectorAll('[data-editor-mode]').forEach(button => {
+        const active = button.dataset.editorMode === mode;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', String(active));
+    });
+}
+
+function togglePanel(name) {
+    if (elements.panel.dataset.panel === name && document.body.classList.contains('panel-open')) {
+        closePanel();
+        return;
+    }
+    elements.panel.dataset.panel = name;
+    document.body.classList.add('panel-open');
+    document.querySelectorAll('.rail-button[data-panel]').forEach(button => button.classList.toggle('is-active', button.dataset.panel === name));
+    elements.panelTitle.textContent = 'Pastas e notas';
+    renderFolderPanel();
+}
+
+function closePanel() {
+    document.body.classList.remove('panel-open');
+    document.querySelectorAll('.rail-button[data-panel]').forEach(button => button.classList.remove('is-active'));
+}
+
+function renderFolderPanel() {
+    const scrollTop = elements.panel.scrollTop;
+    const all = document.createElement('button');
+    all.type = 'button';
+    all.className = `tree-root${state.folder === '' ? ' is-selected' : ''}`;
+    all.dataset.folder = '';
+    all.textContent = 'Todas as notas';
+    const root = document.createElement('section');
+    root.className = 'tree-root-group';
+    root.dataset.dropFolder = '';
+    const rootHeader = document.createElement('div');
+    rootHeader.className = 'tree-row';
+    const rootExpand = makeExpandButton('', 'Notas sem pasta');
+    const rootLabel = document.createElement('span');
+    rootLabel.className = 'tree-group-label';
+    rootLabel.textContent = 'Sem pasta';
+    rootHeader.append(rootExpand, rootLabel);
+    root.append(rootHeader);
+    if (state.expandedFolders.has('')) root.append(renderDirectNotes('', true));
+    const tree = document.createElement('ul');
+    tree.className = 'folder-tree root-folder-tree';
+    for (const folder of state.folders) tree.append(buildFolderNode(folder));
+    elements.panelContent.replaceChildren(all, root, tree);
+    elements.panel.scrollTop = scrollTop;
+}
+
+function makeExpandButton(folderPath, label) {
+    const expand = document.createElement('button');
+    expand.type = 'button';
+    expand.className = 'tree-expand';
+    expand.dataset.toggleFolder = folderPath;
+    const expanded = state.expandedFolders.has(folderPath);
+    expand.setAttribute('aria-label', `${expanded ? 'Recolher' : 'Expandir'} ${label}`);
+    expand.setAttribute('aria-expanded', String(expanded));
+    expand.textContent = expanded ? '⌄' : '›';
+    return expand;
+}
+
+function buildFolderNode(folder) {
+    const item = document.createElement('li');
+    item.className = 'tree-node';
+    const row = document.createElement('div');
+    row.className = 'tree-row';
+    row.append(makeExpandButton(folder.path, folder.name));
+    const select = document.createElement('button');
+    select.type = 'button';
+    select.className = `tree-folder${state.folder === folder.path ? ' is-selected' : ''}`;
+    select.dataset.folder = folder.path;
+    select.dataset.dragFolder = folder.path;
+    select.draggable = true;
+    select.textContent = folder.name;
+    row.dataset.dropFolder = folder.path;
+    row.append(select);
+    item.append(row);
+    if (state.expandedFolders.has(folder.path)) {
+        const contents = document.createElement('ul');
+        contents.className = 'folder-tree';
+        const directNotes = renderDirectNotes(folder.path, false);
+        while (directNotes.firstChild) contents.append(directNotes.firstChild);
+        for (const child of folder.children || []) contents.append(buildFolderNode(child));
+        item.append(contents);
+    }
+    return item;
+}
+
+function renderDirectNotes(folder, root) {
+    const list = document.createElement(root ? 'div' : 'ul');
+    list.className = root ? 'tree-note-list root-note-list' : 'folder-tree-note-list';
+    const page = state.folderNotes.get(folder);
+    if (!page) {
+        void loadFolderNotes(folder);
+        const loading = document.createElement(root ? 'p' : 'li');
+        loading.className = 'tree-loading';
+        loading.textContent = 'Carregando…';
+        list.append(loading);
+        return list;
+    }
+    for (const note of page.items) {
+        const item = document.createElement(root ? 'div' : 'li');
+        item.className = 'tree-note-item';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'tree-note';
+        button.dataset.treeNote = String(note.id);
+        button.dataset.dragNote = String(note.id);
+        button.draggable = true;
+        button.title = note.title;
+        button.textContent = note.title;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'tree-note-delete';
+        remove.dataset.deleteTreeNote = String(note.id);
+        remove.setAttribute('aria-label', `Excluir ${note.title}`);
+        remove.title = 'Excluir nota';
+        remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg>';
+        item.append(button, remove);
+        list.append(item);
+    }
+    if (page.items.length < page.total) {
+        const item = document.createElement(root ? 'div' : 'li');
+        const more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'tree-more';
+        more.dataset.moreFolder = folder;
+        more.textContent = 'Carregar mais notas';
+        item.append(more);
+        list.append(item);
+    }
+    if (!page.items.length) {
+        const empty = document.createElement(root ? 'p' : 'li');
+        empty.className = 'tree-loading';
+        empty.textContent = 'Nenhuma nota nesta pasta';
+        list.append(empty);
+    }
+    return list;
+}
+
+function handlePanelClick(event) {
+    const remove = event.target.closest('[data-delete-tree-note]');
+    if (remove) {
+        event.preventDefault();
+        event.stopPropagation();
+        void deleteNote(Number(remove.dataset.deleteTreeNote));
+        return;
+    }
+    const toggle = event.target.closest('[data-toggle-folder]');
+    if (toggle) {
+        event.preventDefault();
+        event.stopPropagation();
+        document.body.classList.add('panel-open');
+        const folder = toggle.dataset.toggleFolder;
+        if (state.expandedFolders.has(folder)) state.expandedFolders.delete(folder);
+        else {
+            state.expandedFolders.add(folder);
+            void loadFolderNotes(folder);
+        }
+        renderFolderPanel();
+        return;
+    }
+    const more = event.target.closest('[data-more-folder]');
+    if (more) {
+        void loadFolderNotes(more.dataset.moreFolder, true);
+        return;
+    }
+    const folderButton = event.target.closest('[data-folder]');
+    if (folderButton) {
+        void selectFolder(folderButton.dataset.folder);
+        return;
+    }
+    const note = event.target.closest('[data-tree-note]');
+    if (note) {
+        void openNote(Number(note.dataset.treeNote));
+    }
+}
+
+function handleSidebarDragStart(event) {
+    const note = event.target.closest('[data-drag-note]');
+    const folder = event.target.closest('[data-drag-folder]');
+    const source = note || folder;
+    if (!source || !event.dataTransfer) return;
+    const type = note ? 'note' : 'folder';
+    const value = note ? note.dataset.dragNote : folder.dataset.dragFolder;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData(`application/x-pkm-${type}`, value);
+    source.classList.add('is-dragging');
+}
+
+function handleSidebarDragOver(event) {
+    const target = event.target.closest('[data-drop-folder]');
+    if (!target || !event.dataTransfer) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    target.classList.add('is-drop-target');
+}
+
+function handleSidebarDragLeave(event) {
+    const target = event.target.closest('[data-drop-folder]');
+    if (target && !target.contains(event.relatedTarget)) target.classList.remove('is-drop-target');
+}
+
+function clearDropTargets() {
+    elements.panelContent.querySelectorAll('.is-drop-target, .is-dragging').forEach(element => {
+        element.classList.remove('is-drop-target', 'is-dragging');
+    });
+}
+
+async function handleSidebarDrop(event) {
+    const target = event.target.closest('[data-drop-folder]');
+    if (!target || !event.dataTransfer) return;
+    event.preventDefault();
+    const destinationParent = target.dataset.dropFolder;
+    const noteID = event.dataTransfer.getData('application/x-pkm-note');
+    const sourceFolder = event.dataTransfer.getData('application/x-pkm-folder');
+    clearDropTargets();
+    if (noteID) {
+        await moveNoteToFolder(Number(noteID), destinationParent);
+    } else if (sourceFolder) {
+        await moveFolderToParent(sourceFolder, destinationParent);
+    }
+}
+
+async function moveNoteToFolder(noteID, folder) {
+    try {
+        if (state.view === 'editor' && state.noteID === noteID && !(await flushSave())) return;
+        await requestJSON(`/api/notes/${noteID}/folder`, {
+            method: 'PATCH',
+            body: JSON.stringify({ folder })
+        });
+        if (state.view === 'editor' && state.noteID === noteID) {
+            state.noteFolder = folder;
+            state.savedDraft = getDraft();
+            document.querySelector('#currentFolder').textContent = folder || 'Sem pasta';
+        }
+        showMessage('Nota movida.', 'success');
+        await refreshFolderTree();
+        await loadNotes();
+    } catch (error) {
+        showMessage(`Não foi possível mover a nota: ${error.message}`, 'error');
+    }
+}
+
+async function moveFolderToParent(source, target) {
+    try {
+        if (state.view === 'editor' && state.noteFolder &&
+            (state.noteFolder === source || state.noteFolder.startsWith(`${source}/`)) &&
+            !(await flushSave())) return;
+        const result = await requestJSON('/api/folders/move', {
+            method: 'POST',
+            body: JSON.stringify({ source, target })
+        });
+        state.folder = rebaseFolderPath(state.folder, source, result.folder);
+        if (state.listState) {
+            state.listState.folder = rebaseFolderPath(state.listState.folder || '', source, result.folder);
+        }
+        if (state.view === 'editor' && (state.noteFolder === source || state.noteFolder.startsWith(`${source}/`))) {
+            state.noteFolder = rebaseFolderPath(state.noteFolder, source, result.folder);
+            state.savedDraft = getDraft();
+            document.querySelector('#currentFolder').textContent = state.noteFolder || 'Sem pasta';
+            const current = history.state || {};
+            history.replaceState({ ...current, list: state.listState }, '', location.href);
+        }
+        showMessage('Pasta movida.', 'success');
+        updateListHistory();
+        await refreshFolderTree();
+        await loadNotes();
+    } catch (error) {
+        showMessage(`Não foi possível mover a pasta: ${error.message}`, 'error');
+    }
+}
+
+function rebaseFolderPath(folder, source, destination) {
+    if (folder === source) return destination;
+    return folder.startsWith(`${source}/`) ? destination + folder.slice(source.length) : folder;
+}
+
+async function refreshFolderTree() {
+    state.folderNotesGeneration++;
+    state.folderNotes.clear();
+    await loadFolders();
+    const folders = ['', ...state.expandedFolders].filter((folder, index, list) => list.indexOf(folder) === index);
+    await Promise.all(folders.map(folder => loadFolderNotes(folder)));
+}
+
+async function selectFolder(folder) {
+    if (state.view === 'editor' && !(await flushSave())) return;
+    if (state.view === 'editor') {
+        history.pushState({ view: 'list', list: { ...captureListState(), folder, offset: 0 } }, '', location.pathname);
+        state.view = 'list';
+        state.noteID = null;
+        elements.editorView.hidden = true;
+        elements.searchView.hidden = false;
+        elements.newNote.hidden = false;
+    }
+    state.folder = folder;
+    state.offset = 0;
+    loadNotes();
+    updateListHistory();
+    if (elements.panel.dataset.panel === 'files') renderFolderPanel();
+}
+
+function setupTheme() {
+    const saved = localStorage.getItem('theme');
+    document.documentElement.dataset.theme = saved === 'light' ? 'light' : 'dark';
+}
+
+function toggleTheme() {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem('theme', next);
+}
+
+async function requestJSON(url, options = {}) {
+    const response = await fetch(url, {
+        ...options,
+        headers: {
+            ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+            ...options.headers
+        }
+    });
+    if (!response.ok) {
+        const message = (await response.text()).trim();
+        throw new Error(message || `HTTP ${response.status}`);
+    }
+    if (response.status === 204) return null;
+    return response.json();
+}
+
+function showMessage(message, kind = '') {
+    window.clearTimeout(showMessage.clearTimer);
+    elements.appMessage.textContent = message;
+    elements.appMessage.className = `app-message${kind ? ` is-${kind}` : ''}`;
+    if (!message) return;
+    showMessage.clearTimer = window.setTimeout(() => {
+        if (elements.appMessage.textContent === message) {
+            elements.appMessage.textContent = '';
+            elements.appMessage.className = 'app-message';
+        }
+    }, kind === 'success' ? 2800 : 6000);
+}

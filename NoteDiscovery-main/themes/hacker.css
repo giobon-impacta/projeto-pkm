@@ -1,0 +1,39 @@
+/* Hacker — phosphor terminal / CRT aesthetic */
+/* @theme-type: dark */
+
+:root[data-theme="hacker"] {
+  /* Background colors — near-black with a green wash */
+  --bg-primary: #0a0f0c;
+  --bg-secondary: #050806;
+  --bg-tertiary: #122018;
+  --bg-hover: #1a2e22;
+  --bg-active: #234030;
+
+  /* Text — soft phosphor on dark */
+  --text-primary: #c8f5c8;
+  --text-secondary: #8ecf8e;
+  --text-tertiary: #5a9c6a;
+
+  /* Borders — dim terminal green */
+  --border-primary: #1f4d33;
+  --border-secondary: #163828;
+
+  /* Accent — bright matrix green for controls & links */
+  --accent-primary: #39ff14;
+  --accent-hover: #5cff3d;
+  --accent-light: rgba(57, 255, 20, 0.18);
+
+  /* Status colors — tuned for green UI */
+  --success: #5ee984;
+  --error: #ff6b8a;
+  --warning: #ffd447;
+
+  /* Bold + italic — amber CRT alert + lighter matrix green (same green family) */
+  --syntax-bold:   #ffd447; /* amber CRT alert (historically authentic — amber CRTs existed) */
+  --syntax-italic: #86efac; /* lighter green — same family as matrix-green heading */
+
+  /* Shadows — heavy, like a dim room */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.55);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.75);
+}
