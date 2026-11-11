@@ -359,6 +359,12 @@ function setupEventListeners() {
         button.addEventListener('click', () => setEditorMode(button.dataset.editorMode));
     });
     window.addEventListener('popstate', event => void handlePopState(event));
+    window.addEventListener('beforeunload', event => {
+        if (state.view === 'editor' && isDraftDirty()) {
+            event.preventDefault();
+            event.returnValue = '';
+        }
+    });
     document.addEventListener('keydown', event => {
         if (event.key === '/' && state.view === 'list' && !isTypingTarget(event.target)) {
             event.preventDefault();
@@ -1297,6 +1303,7 @@ async function deleteNote(id) {
 }
 
 function updatePreview() {
+    if (elements.editorWorkspace.dataset.editorMode === 'edit') return;
     const requestID = ++previewRequestID;
     window.clearTimeout(previewTimer);
     const markdown = stripFrontmatter(elements.noteContent.value);
@@ -1680,6 +1687,12 @@ function setEditorMode(mode) {
         button.classList.toggle('is-active', active);
         button.setAttribute('aria-pressed', String(active));
     });
+    if (mode === 'edit') {
+        window.clearTimeout(previewTimer);
+        previewRequestID++;
+    } else {
+        updatePreview();
+    }
     requestAnimationFrame(() => {
         syncPreviewMinimumHeight();
         syncEditorScrollFromSource();

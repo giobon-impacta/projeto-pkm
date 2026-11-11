@@ -21,7 +21,7 @@ O script compila o backend com FTS5 e inicia o servidor em `http://localhost:800
 ./run.sh --data-dir ./meus-dados --port 8080
 ```
 
-`PORT` e `NOTES_DIR` também podem fornecer os valores padrão. O banco fica em `notes.db` dentro do diretório de dados. Na primeira inicialização, o app cria o índice FTS5 e indexa as notas existentes sem substituir os registros.
+`PORT` e `NOTES_DIR` também podem fornecer os valores padrão. O banco fica em `notes.db` dentro do diretório de dados. Na primeira inicialização, o app cria o índice FTS5 e o índice de vínculos entre notas, indexando as notas existentes sem substituir os registros.
 
 Para exigir senha, defina `AUTHENTICATION_PASSWORD` antes de iniciar:
 
@@ -59,7 +59,7 @@ O preview usa Goldmark no backend. HTML bruto é mantido inativo e destinos com 
 
 ## Dados, anexos e backup
 
-- As notas, seus caminhos de pasta virtuais e metadados ficam em `notes.db` no diretório de dados. O índice de busca FTS5 é mantido no mesmo banco.
+- As notas, seus caminhos de pasta virtuais e metadados ficam em `notes.db` no diretório de dados. O índice de busca FTS5 e o índice de vínculos (`note_links`) são mantidos no mesmo banco. O grafo e os backlinks são resolvidos a partir desse índice, sem reler o conteúdo de todas as notas a cada consulta.
 - Anexos são gravados em `attachments/<id-da-nota>/` no mesmo diretório de dados. O nome físico é aleatório; o nome original e o tipo de mídia ficam nos metadados SQLite. Assim, mover a nota para outra pasta virtual não move nem quebra o arquivo.
 - Ao excluir uma nota, seus metadados de anexos são removidos pelo SQLite e os arquivos daquela nota são apagados do disco.
 - Para fazer backup completo, pare o servidor e copie **o arquivo `notes.db` e a pasta `attachments/` juntos**. Restaurar somente o banco preserva as referências, mas não recupera o conteúdo dos arquivos; restaurar somente os anexos não recupera as notas nem os metadados.
@@ -97,6 +97,7 @@ As pastas continuam virtuais: são valores no SQLite derivados das notas, não d
 cd backend
 go test -tags sqlite_fts5 ./...
 go vet -tags sqlite_fts5 ./...
+go test -tags sqlite_fts5 -run '^$' -bench BenchmarkNoteGraph ./...
 cd ../web/frontend
 npm test
 ```

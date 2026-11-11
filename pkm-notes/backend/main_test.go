@@ -450,10 +450,15 @@ func TestFrontmatterTagsAreStoredAsNoteMetadata(t *testing.T) {
 }
 
 func TestMarkdownPreviewRestrictsUnsafeContent(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
 	request := httptest.NewRequest(http.MethodPost, "/api/preview",
 		strings.NewReader("# Heading\n\n<script>alert(1)</script>\n\n[unsafe](javascript:alert(1))"))
 	response := httptest.NewRecorder()
-	handlePreview(response, request)
+	app.handlePreview(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("preview status = %d, body = %s", response.Code, response.Body.String())
@@ -471,11 +476,16 @@ func TestMarkdownPreviewRestrictsUnsafeContent(t *testing.T) {
 }
 
 func TestMarkdownPreviewRendersGFMExtensions(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
 	source := "| A | B |\n| --- | --- |\n| 1 | 2 |\n\n" +
 		"~~riscado~~\n\n- [ ] pendente\n- [x] feita\n\nhttps://example.com\n"
 	request := httptest.NewRequest(http.MethodPost, "/api/preview", strings.NewReader(source))
 	response := httptest.NewRecorder()
-	handlePreview(response, request)
+	app.handlePreview(response, request)
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("preview status = %d, body = %s", response.Code, response.Body.String())

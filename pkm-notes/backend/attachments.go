@@ -83,7 +83,8 @@ func (a *App) ListAttachments(noteID int64) ([]Attachment, error) {
 }
 
 func (a *App) SaveAttachment(noteID int64, source io.Reader, originalFilename string) (Attachment, error) {
-	if _, err := a.GetNote(noteID); err != nil {
+	var exists int
+	if err := a.db.QueryRow("SELECT 1 FROM notes WHERE rowid = ?", noteID).Scan(&exists); err != nil {
 		return Attachment{}, err
 	}
 	filename, err := cleanAttachmentFilename(originalFilename)
@@ -270,7 +271,11 @@ func (a *App) handleAttachment(w http.ResponseWriter, r *http.Request, noteID, a
 			disposition = "inline"
 		}
 		w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": item.Filename}))
-		http.ServeContent(w, r, item.Filename, time.Unix(0, 0), file)
+		// Attachment storage names are random and never reused, so the content
+		// behind a given ID is immutable. Keep it private because downloads may
+		// require an authenticated session.
+		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+		http.ServeContent(w, r, item.Filename, time.Time{}, file)
 	case http.MethodDelete:
 		err := a.DeleteAttachment(noteID, attachmentID)
 		if errors.Is(err, sql.ErrNoRows) {

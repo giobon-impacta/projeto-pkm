@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -131,7 +133,8 @@ func TestNoteGraphAndBacklinksResolveMarkdownAndWikilinks(t *testing.T) {
 		Title:  "Source",
 		Folder: "Projects",
 		Content: "[[Target|alias]] [Other](../Reference/Other.md) " +
-			"[external](https://example.com) `[[CodeOnly]]`\n\n```md\n[[AlsoCodeOnly]]\n```",
+			"[external](https://example.com) [protocol-relative](//example.com/Other) " +
+			"`[[CodeOnly]]`\n\n```md\n[[AlsoCodeOnly]]\n```",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -216,6 +219,11 @@ func TestAuthenticationProtectsAPIAndSupportsLoginLogout(t *testing.T) {
 	if root.Code != http.StatusSeeOther || root.Header().Get("Location") != "/login.html" {
 		t.Fatalf("unauthenticated root status = %d, location = %q", root.Code, root.Header().Get("Location"))
 	}
+	index := httptest.NewRecorder()
+	handler.ServeHTTP(index, httptest.NewRequest(http.MethodGet, "/index.html", nil))
+	if index.Code != http.StatusSeeOther || index.Header().Get("Location") != "/login.html" {
+		t.Fatalf("unauthenticated index.html status = %d, location = %q", index.Code, index.Header().Get("Location"))
+	}
 	protected := httptest.NewRecorder()
 	handler.ServeHTTP(protected, httptest.NewRequest(http.MethodGet, "/api/notes", nil))
 	if protected.Code != http.StatusUnauthorized {
@@ -275,6 +283,251 @@ func TestExpiredAndTamperedAuthenticationTokensAreRejected(t *testing.T) {
 	}
 	if auth.validSessionToken(valid+"tampered", time.Now()) {
 		t.Fatal("tampered session token was accepted")
+	}
+}
+
+func TestPersistedLinksFollowRenamesMovesAndUpdates(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	sourceID, err := app.CreateNote(Note{
+		Title:   "Source",
+		Folder:  "Projects",
+		Content: "[[Target]] [Other](../Reference/Other.md)",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetID, err := app.CreateNote(Note{Title: "Target", Folder: "Projects"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherID, err := app.CreateNote(Note{Title: "Other", Folder: "Reference"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	movedOtherID, err := app.CreateNote(Note{Title: "Other", Folder: "Archive/Reference"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	edgesFrom := func(id int64) map[int64]string {
+		graph, err := app.NoteGraph()
+		if err != nil {
+			t.Fatal(err)
+		}
+		edges := make(map[int64]string)
+		for _, edge := range graph.Edges {
+			if edge.Source == id {
+				edges[edge.Target] = edge.Type
+			}
+		}
+		return edges
+	}
+
+	if edges := edgesFrom(sourceID); len(edges) != 2 ||
+		edges[targetID] != "wikilink" || edges[otherID] != "markdown" {
+		t.Fatalf("unexpected initial edges: %#v", edges)
+	}
+	backlinks, err := app.Backlinks(targetID)
+	if err != nil || len(backlinks) != 1 || backlinks[0].ID != sourceID {
+		t.Fatalf("unexpected initial backlinks: %#v err=%v", backlinks, err)
+	}
+
+	if err := app.UpdateNote(targetID, Note{Title: "Renamed", Folder: "Projects"}); err != nil {
+		t.Fatal(err)
+	}
+	if edges := edgesFrom(sourceID); len(edges) != 1 || edges[otherID] != "markdown" {
+		t.Fatalf("renaming the target should drop the dangling wikilink: %#v", edges)
+	}
+
+	newTargetID, err := app.CreateNote(Note{Title: "Target", Folder: "Projects"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edges := edgesFrom(sourceID); len(edges) != 2 || edges[newTargetID] != "wikilink" {
+		t.Fatalf("a new note with the missing title should make the link resolve again: %#v", edges)
+	}
+
+	if err := app.MoveNoteFolder(sourceID, "Archive/Deep"); err != nil {
+		t.Fatal(err)
+	}
+	if edges := edgesFrom(sourceID); len(edges) != 2 ||
+		edges[newTargetID] != "wikilink" || edges[movedOtherID] != "markdown" {
+		t.Fatalf("moving the source should change relative link resolution: %#v", edges)
+	}
+	if err := app.MoveNoteFolder(sourceID, "Projects"); err != nil {
+		t.Fatal(err)
+	}
+	if edges := edgesFrom(sourceID); len(edges) != 2 ||
+		edges[newTargetID] != "wikilink" || edges[otherID] != "markdown" {
+		t.Fatalf("moving the source back should restore the original relative target: %#v", edges)
+	}
+
+	if err := app.UpdateNote(sourceID, Note{
+		Title:   "Source",
+		Folder:  "Projects",
+		Content: "[[Target]] only",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if edges := edgesFrom(sourceID); len(edges) != 1 || edges[newTargetID] != "wikilink" {
+		t.Fatalf("updating the content should remove the markdown edge: %#v", edges)
+	}
+
+	if err := app.DeleteNote(newTargetID); err != nil {
+		t.Fatal(err)
+	}
+	if edges := edgesFrom(sourceID); len(edges) != 0 {
+		t.Fatalf("deleting the target should remove the edge: %#v", edges)
+	}
+	var linkRows int
+	if err := app.db.QueryRow("SELECT COUNT(*) FROM note_links WHERE source_id = ?", sourceID).Scan(&linkRows); err != nil {
+		t.Fatal(err)
+	}
+	if linkRows != 1 {
+		t.Fatalf("expected one stored raw link for the remaining wikilink, got %d", linkRows)
+	}
+	if err := app.DeleteNote(sourceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.db.QueryRow("SELECT COUNT(*) FROM note_links WHERE source_id = ?", sourceID).Scan(&linkRows); err != nil {
+		t.Fatal(err)
+	}
+	if linkRows != 0 {
+		t.Fatalf("deleting a note should cascade to its link rows, got %d", linkRows)
+	}
+}
+
+func TestMigrationBackfillsPersistedLinksIdempotently(t *testing.T) {
+	dataDir := t.TempDir()
+	db, err := sql.Open("sqlite3", filepath.Join(dataDir, "notes.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TABLE notes (
+		rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+		title TEXT NOT NULL,
+		content TEXT,
+		folder TEXT DEFAULT '',
+		tags TEXT DEFAULT '',
+		created_at TEXT DEFAULT (datetime('now')),
+		updated_at TEXT DEFAULT (datetime('now'))
+	)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO notes(title, content) VALUES ('Source', '[[Target]]')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO notes(title, content) VALUES ('Target', 'body')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	for attempt := 0; attempt < 2; attempt++ {
+		app, err := NewApp(dataDir)
+		if err != nil {
+			t.Fatalf("open attempt %d: %v", attempt, err)
+		}
+		graph, err := app.NoteGraph()
+		if err != nil {
+			app.Close()
+			t.Fatalf("graph attempt %d: %v", attempt, err)
+		}
+		if len(graph.Edges) != 1 || graph.Edges[0].Type != "wikilink" {
+			app.Close()
+			t.Fatalf("migration did not backfill links on attempt %d: %#v", attempt, graph.Edges)
+		}
+		var version int
+		if err := app.db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil {
+			app.Close()
+			t.Fatal(err)
+		}
+		if version != 2 {
+			app.Close()
+			t.Fatalf("schema version = %d, want 2", version)
+		}
+		if err := app.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestHealthReportsDatabaseStatus(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	handler := app.Handler(filepath.Join("..", "web", "frontend"))
+	okResponse := httptest.NewRecorder()
+	handler.ServeHTTP(okResponse, httptest.NewRequest(http.MethodGet, "/api/health", nil))
+	if okResponse.Code != http.StatusOK {
+		t.Fatalf("healthy status = %d, body = %s", okResponse.Code, okResponse.Body.String())
+	}
+	if err := app.db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	failedResponse := httptest.NewRecorder()
+	handler.ServeHTTP(failedResponse, httptest.NewRequest(http.MethodGet, "/api/health", nil))
+	if failedResponse.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unhealthy status = %d, body = %s", failedResponse.Code, failedResponse.Body.String())
+	}
+}
+
+func TestNoteGraphUsesPersistedLinks(t *testing.T) {
+	// Guard against accidentally dropping the persisted-link fast path: the
+	// graph must not need note contents once note_links is populated.
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	first, err := app.CreateNote(Note{Title: "A", Content: "[[B]]"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.CreateNote(Note{Title: "B", Content: "[[A]]"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.db.Exec("UPDATE notes SET content = 'corrupted' WHERE rowid = ?", first); err != nil {
+		t.Fatal(err)
+	}
+	graph, err := app.NoteGraph()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(graph.Edges) != 2 {
+		t.Fatalf("graph read note content instead of note_links: %#v", graph.Edges)
+	}
+}
+
+func BenchmarkNoteGraph(b *testing.B) {
+	app, err := NewApp(b.TempDir())
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer app.Close()
+	const noteCount = 2000
+	for index := 0; index < noteCount; index++ {
+		content := fmt.Sprintf("[[Note %d]] [[Note %d]]", (index+1)%noteCount, (index+7)%noteCount)
+		if _, err := app.CreateNote(Note{Title: fmt.Sprintf("Note %d", index), Content: content}); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	for index := 0; index < b.N; index++ {
+		if _, err := app.NoteGraph(); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 

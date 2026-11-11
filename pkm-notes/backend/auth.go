@@ -145,7 +145,7 @@ func (a *authenticator) middleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if r.URL.Path == "/" && !a.authorized(r) {
+		if (r.URL.Path == "/" || r.URL.Path == "/index.html") && !a.authorized(r) {
 			http.Redirect(w, r, "/login.html", http.StatusSeeOther)
 			return
 		}

@@ -141,62 +141,77 @@ func (a *App) Close() error {
 }
 
 func (a *App) migrate() error {
-	if _, err := a.db.Exec(`CREATE TABLE IF NOT EXISTS notes (
-		rowid INTEGER PRIMARY KEY AUTOINCREMENT,
-		title TEXT NOT NULL,
-		content TEXT DEFAULT '',
-		folder TEXT DEFAULT '',
-		tags TEXT DEFAULT '',
-		created_at TEXT DEFAULT (datetime('now')),
-		updated_at TEXT DEFAULT (datetime('now'))
-	)`); err != nil {
-		return err
+	baseSchema := []string{
+		`CREATE TABLE IF NOT EXISTS notes (
+			rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+			title TEXT NOT NULL,
+			content TEXT DEFAULT '',
+			folder TEXT DEFAULT '',
+			tags TEXT DEFAULT '',
+			created_at TEXT DEFAULT (datetime('now')),
+			updated_at TEXT DEFAULT (datetime('now'))
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder)`,
+		`CREATE INDEX IF NOT EXISTS idx_notes_folder_title ON notes(folder, title COLLATE NOCASE)`,
+		`CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS schema_migrations (
+			version INTEGER PRIMARY KEY,
+			applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)`,
+		`CREATE TABLE IF NOT EXISTS attachments (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			note_id INTEGER NOT NULL REFERENCES notes(rowid) ON DELETE CASCADE,
+			filename TEXT NOT NULL,
+			storage_name TEXT NOT NULL,
+			media_type TEXT NOT NULL,
+			size INTEGER NOT NULL,
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			UNIQUE(note_id, storage_name)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_attachments_note ON attachments(note_id, id)`,
 	}
-	if _, err := a.db.Exec(`CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder)`); err != nil {
-		return err
-	}
-	if _, err := a.db.Exec(`CREATE INDEX IF NOT EXISTS idx_notes_folder_title ON notes(folder, title COLLATE NOCASE)`); err != nil {
-		return err
-	}
-	if _, err := a.db.Exec(`CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at DESC)`); err != nil {
-		return err
-	}
-	if _, err := a.db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
-		version INTEGER PRIMARY KEY,
-		applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-	)`); err != nil {
-		return err
-	}
-	if _, err := a.db.Exec(`CREATE TABLE IF NOT EXISTS attachments (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		note_id INTEGER NOT NULL REFERENCES notes(rowid) ON DELETE CASCADE,
-		filename TEXT NOT NULL,
-		storage_name TEXT NOT NULL,
-		media_type TEXT NOT NULL,
-		size INTEGER NOT NULL,
-		created_at TEXT NOT NULL DEFAULT (datetime('now')),
-		UNIQUE(note_id, storage_name)
-	)`); err != nil {
-		return err
-	}
-	if _, err := a.db.Exec("CREATE INDEX IF NOT EXISTS idx_attachments_note ON attachments(note_id, id)"); err != nil {
-		return err
+	for _, statement := range baseSchema {
+		if _, err := a.db.Exec(statement); err != nil {
+			return err
+		}
 	}
 
-	var applied int
-	if err := a.db.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 1").Scan(&applied); err != nil {
-		return err
+	migrations := []struct {
+		version int
+		apply   func(*sql.Tx) error
+	}{
+		{version: 1, apply: migrateSearchIndex},
+		{version: 2, apply: migrateNoteLinks},
 	}
-	if applied != 0 {
-		return nil
+	for _, migration := range migrations {
+		var applied int
+		if err := a.db.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = ?",
+			migration.version).Scan(&applied); err != nil {
+			return err
+		}
+		if applied != 0 {
+			continue
+		}
+		tx, err := a.db.Begin()
+		if err != nil {
+			return err
+		}
+		if err := migration.apply(tx); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("migration %d: %w", migration.version, err)
+		}
+		if _, err := tx.Exec("INSERT INTO schema_migrations(version) VALUES (?)", migration.version); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("record migration %d: %w", migration.version, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
 	}
+	return nil
+}
 
-	tx, err := a.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
+func migrateSearchIndex(tx *sql.Tx) error {
 	statements := []string{
 		`CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
 			title,
@@ -218,14 +233,64 @@ func (a *App) migrate() error {
 			INSERT INTO notes_fts(rowid, title, content) VALUES (new.rowid, new.title, new.content);
 		END`,
 		`INSERT INTO notes_fts(notes_fts) VALUES ('rebuild')`,
-		`INSERT INTO schema_migrations(version) VALUES (1)`,
 	}
 	for _, statement := range statements {
 		if _, err := tx.Exec(statement); err != nil {
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
+}
+
+// migrateNoteLinks stores the raw link targets found in each note. Resolution
+// against current titles and folder paths happens at read time, so renaming a
+// note, moving a folder or creating a note with a previously dangling title
+// keeps existing links consistent without re-parsing every note.
+func migrateNoteLinks(tx *sql.Tx) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS note_links (
+			source_id INTEGER NOT NULL REFERENCES notes(rowid) ON DELETE CASCADE,
+			target_key TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			PRIMARY KEY (source_id, target_key, kind)
+		)`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.Exec(statement); err != nil {
+			return err
+		}
+	}
+
+	ids := make([]int64, 0)
+	rows, err := tx.Query("SELECT rowid FROM notes ORDER BY rowid")
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, id := range ids {
+		var content string
+		if err := tx.QueryRow("SELECT COALESCE(content, '') FROM notes WHERE rowid = ?", id).Scan(&content); err != nil {
+			return err
+		}
+		if err := replaceNoteLinks(tx, id, content); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a *App) ListNotes(folder string, limit, offset int) (Page, error) {
@@ -362,19 +427,39 @@ func (a *App) CreateNote(note Note) (int64, error) {
 	if err := validateNote(&note); err != nil {
 		return 0, err
 	}
-	result, err := a.db.Exec("INSERT INTO notes(title, content, folder, tags) VALUES (?, ?, ?, ?)",
+	tx, err := a.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec("INSERT INTO notes(title, content, folder, tags) VALUES (?, ?, ?, ?)",
 		note.Title, note.Content, note.Folder, strings.Join(note.Tags, ","))
 	if err != nil {
 		return 0, err
 	}
-	return result.LastInsertId()
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if err := replaceNoteLinks(tx, id, note.Content); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func (a *App) UpdateNote(id int64, note Note) error {
 	if err := validateNote(&note); err != nil {
 		return err
 	}
-	result, err := a.db.Exec(`UPDATE notes SET title = ?, content = ?, folder = ?, tags = ?,
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`UPDATE notes SET title = ?, content = ?, folder = ?, tags = ?,
 		updated_at = datetime('now') WHERE rowid = ?`,
 		note.Title, note.Content, note.Folder, strings.Join(note.Tags, ","), id)
 	if err != nil {
@@ -387,7 +472,10 @@ func (a *App) UpdateNote(id int64, note Note) error {
 	if count == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+	if err := replaceNoteLinks(tx, id, note.Content); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (a *App) MoveNoteFolder(id int64, folder string) error {
@@ -678,6 +766,13 @@ func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	if err := a.db.PingContext(ctx); err != nil {
+		log.Printf("health check: %v", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "error"})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -912,24 +1007,6 @@ func (a *App) handleFolderNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, page)
-}
-
-func handlePreview(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w)
-		return
-	}
-	source, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxContentSize))
-	if err != nil {
-		var maxBytesError *http.MaxBytesError
-		if errors.As(err, &maxBytesError) {
-			http.Error(w, "markdown content exceeds the 5 MiB limit", http.StatusRequestEntityTooLarge)
-		} else {
-			http.Error(w, "failed to read markdown content", http.StatusBadRequest)
-		}
-		return
-	}
-	renderMarkdownPreview(w, source)
 }
 
 func (a *App) handlePreview(w http.ResponseWriter, r *http.Request) {

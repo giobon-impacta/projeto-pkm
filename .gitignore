@@ -1,0 +1,13 @@
+# Build artifacts
+/pkm-notes/pkm-notes-backend
+/pkm-notes/bin/
+
+# Local application data (notes, WAL, attachments)
+/pkm-notes/data/
+/pkm-notes/attachments/
+
+# Reference copy kept on disk but not part of the pkm-notes project
+/NoteDiscovery-main/
+
+# Go test binaries
+*.test

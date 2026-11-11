@@ -110,7 +110,14 @@ export class GraphView {
         this.hoveredNodeID = null;
         this.ignoreNextClick = false;
         this.hasRendered = false;
-        this.handleWindowResize = () => this.resize();
+        this.resizeTimer = 0;
+        this.handleWindowResize = () => {
+            window.clearTimeout(this.resizeTimer);
+            this.resizeTimer = window.setTimeout(() => {
+                this.resizeTimer = 0;
+                this.resize();
+            }, 120);
+        };
         if (typeof ResizeObserver === 'function') {
             this.resizeObserver = new ResizeObserver(this.handleWindowResize);
             this.resizeObserver.observe(svg);
@@ -383,6 +390,7 @@ export class GraphView {
     }
 
     destroy() {
+        window.clearTimeout(this.resizeTimer);
         if (this.resizeObserver) this.resizeObserver.disconnect();
         else window.removeEventListener('resize', this.handleWindowResize);
     }

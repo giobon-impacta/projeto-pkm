@@ -145,37 +145,32 @@ func (a *App) NoteGraph() (NoteGraph, error) {
 		graph.Nodes = append(graph.Nodes, note.GraphNode)
 	}
 	seenEdges := make(map[[3]int64]struct{})
-	rows, err := a.db.Query("SELECT rowid, COALESCE(content, '') FROM notes")
+	rows, err := a.db.Query(`SELECT source_id, target_key, kind
+		FROM note_links ORDER BY source_id, target_key, kind`)
 	if err != nil {
 		return NoteGraph{}, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var noteID int64
-		var content string
-		if err := rows.Scan(&noteID, &content); err != nil {
+		var sourceID int64
+		var targetKey, kind string
+		if err := rows.Scan(&sourceID, &targetKey, &kind); err != nil {
 			return NoteGraph{}, err
 		}
-		note, exists := notesByID[noteID]
+		note, exists := notesByID[sourceID]
 		if !exists {
 			continue
 		}
-		targets, err := extractNoteLinks(content)
-		if err != nil {
-			return NoteGraph{}, err
+		targetID := resolveNoteLink(note, targetKey, byPath, byTitle)
+		if targetID == 0 || targetID == note.ID {
+			continue
 		}
-		for _, target := range targets {
-			targetID := resolveNoteLink(note, target.value, byPath, byTitle)
-			if targetID == 0 || targetID == note.ID {
-				continue
-			}
-			edgeKey := [3]int64{note.ID, targetID, int64(linkKindID(target.kind))}
-			if _, found := seenEdges[edgeKey]; found {
-				continue
-			}
-			seenEdges[edgeKey] = struct{}{}
-			graph.Edges = append(graph.Edges, GraphEdge{Source: note.ID, Target: targetID, Type: target.kind})
+		edgeKey := [3]int64{note.ID, targetID, int64(linkKindID(kind))}
+		if _, found := seenEdges[edgeKey]; found {
+			continue
 		}
+		seenEdges[edgeKey] = struct{}{}
+		graph.Edges = append(graph.Edges, GraphEdge{Source: note.ID, Target: targetID, Type: kind})
 	}
 	if err := rows.Err(); err != nil {
 		return NoteGraph{}, err
@@ -194,45 +189,65 @@ func (a *App) NoteGraph() (NoteGraph, error) {
 }
 
 func (a *App) Backlinks(noteID int64) ([]NoteSummary, error) {
+	var exists int
+	if err := a.db.QueryRow("SELECT 1 FROM notes WHERE rowid = ?", noteID).Scan(&exists); err != nil {
+		return nil, err
+	}
 	graph, err := a.NoteGraph()
 	if err != nil {
 		return nil, err
 	}
-	known := false
-	for _, node := range graph.Nodes {
-		if node.ID == noteID {
-			known = true
-			break
-		}
-	}
-	if !known {
-		return nil, sql.ErrNoRows
-	}
-	backlinkIDs := make(map[int64]struct{})
+	backlinkIDs := make([]int64, 0)
+	seenIDs := make(map[int64]struct{})
 	for _, edge := range graph.Edges {
-		if edge.Target == noteID {
-			backlinkIDs[edge.Source] = struct{}{}
+		if edge.Target != noteID {
+			continue
 		}
+		if _, found := seenIDs[edge.Source]; found {
+			continue
+		}
+		seenIDs[edge.Source] = struct{}{}
+		backlinkIDs = append(backlinkIDs, edge.Source)
 	}
 	if len(backlinkIDs) == 0 {
 		return []NoteSummary{}, nil
 	}
-	rows, err := a.db.Query(`SELECT rowid, title, folder, substr(COALESCE(content, ''), 1, 180), updated_at, COALESCE(tags, '')
-		FROM notes ORDER BY title COLLATE NOCASE, rowid`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	summaries, err := scanSummaries(rows)
-	if err != nil {
-		return nil, err
-	}
+
+	// SQLite allows at most 999 bound parameters by default. Fetch in chunks
+	// instead of loading every note summary just to filter it in Go.
+	const chunkSize = 500
 	result := make([]NoteSummary, 0, len(backlinkIDs))
-	for _, item := range summaries {
-		if _, found := backlinkIDs[item.ID]; found {
-			result = append(result, item)
+	for start := 0; start < len(backlinkIDs); start += chunkSize {
+		end := start + chunkSize
+		if end > len(backlinkIDs) {
+			end = len(backlinkIDs)
 		}
+		chunk := backlinkIDs[start:end]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(chunk)), ",")
+		arguments := make([]any, len(chunk))
+		for index, id := range chunk {
+			arguments[index] = id
+		}
+		rows, err := a.db.Query(`SELECT rowid, title, folder, substr(COALESCE(content, ''), 1, 180),
+			updated_at, COALESCE(tags, '') FROM notes WHERE rowid IN (`+placeholders+`)`,
+			arguments...)
+		if err != nil {
+			return nil, err
+		}
+		items, err := scanSummaries(rows)
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, items...)
 	}
+	sort.Slice(result, func(i, j int) bool {
+		left, right := strings.ToLower(result[i].Title), strings.ToLower(result[j].Title)
+		if left != right {
+			return left < right
+		}
+		return result[i].ID < result[j].ID
+	})
 	return result, nil
 }
 
@@ -290,6 +305,38 @@ func extractNoteLinks(content string) ([]linkTarget, error) {
 	return targets, nil
 }
 
+const maxStoredLinkTarget = 2048
+
+// replaceNoteLinks keeps the persisted raw link targets in sync with the note
+// content. Only the edited note is parsed; target resolution is deferred to
+// NoteGraph and Backlinks so renames stay cheap.
+func replaceNoteLinks(tx *sql.Tx, sourceID int64, content string) error {
+	if _, err := tx.Exec("DELETE FROM note_links WHERE source_id = ?", sourceID); err != nil {
+		return err
+	}
+	targets, err := extractNoteLinks(content)
+	if err != nil {
+		return err
+	}
+	seen := make(map[[2]string]struct{}, len(targets))
+	for _, target := range targets {
+		key := strings.TrimSpace(target.value)
+		if key == "" || len(key) > maxStoredLinkTarget {
+			continue
+		}
+		pair := [2]string{key, target.kind}
+		if _, found := seen[pair]; found {
+			continue
+		}
+		seen[pair] = struct{}{}
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO note_links(source_id, target_key, kind)
+			VALUES (?, ?, ?)`, sourceID, key, target.kind); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func stripCodeForWikilinks(content string) string {
 	lines := strings.Split(content, "\n")
 	var result strings.Builder
@@ -337,16 +384,24 @@ func resolveNoteLink(source indexedNote, rawTarget string, byPath, byTitle map[s
 	if target == "" || strings.HasPrefix(target, "#") {
 		return 0
 	}
-	parsed, err := url.Parse(target)
-	if err != nil || parsed.Scheme != "" || parsed.Host != "" {
+	if strings.HasPrefix(target, "//") {
 		return 0
 	}
-	target = parsed.Path
+	// Most targets are plain titles or relative paths. Parsing every one as a
+	// URL is unnecessary and shows up in graph benchmarks; only do it when the
+	// target actually contains URL syntax.
+	if strings.ContainsAny(target, "?#%:") {
+		parsed, err := url.Parse(target)
+		if err != nil || parsed.Scheme != "" || parsed.Host != "" {
+			return 0
+		}
+		target = parsed.Path
+		if decoded, err := url.PathUnescape(target); err == nil {
+			target = decoded
+		}
+	}
 	if target == "" {
 		return 0
-	}
-	if decoded, err := url.PathUnescape(target); err == nil {
-		target = decoded
 	}
 	target = strings.TrimPrefix(target, "/")
 	if strings.HasSuffix(strings.ToLower(target), ".md") {
