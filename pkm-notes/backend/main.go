@@ -243,9 +243,11 @@ func migrateSearchIndex(tx *sql.Tx) error {
 }
 
 // migrateNoteLinks stores the raw link targets found in each note. Resolution
-// against current titles and folder paths happens at read time, so renaming a
-// note, moving a folder or creating a note with a previously dangling title
-// keeps existing links consistent without re-parsing every note.
+// against current titles and folder paths happens at read time, so creating a
+// note with a previously dangling title keeps existing links consistent
+// without re-parsing every note. Renames and folder moves rewrite only the
+// notes whose links would break (see rewriteIncomingLinks and
+// relinkNotesAfterMove).
 func migrateNoteLinks(tx *sql.Tx) error {
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS note_links (
@@ -459,6 +461,19 @@ func (a *App) UpdateNote(id int64, note Note) error {
 		return err
 	}
 	defer tx.Rollback()
+	var oldTitle string
+	if err := tx.QueryRow("SELECT title FROM notes WHERE rowid = ?", id).Scan(&oldTitle); err != nil {
+		return err
+	}
+	titleChanged := oldTitle != note.Title
+	var byPath, byTitle map[string]int64
+	if titleChanged {
+		notes, err := readNotesForLinksWith(tx)
+		if err != nil {
+			return err
+		}
+		byPath, byTitle = makeNoteLinkIndexes(notes)
+	}
 	result, err := tx.Exec(`UPDATE notes SET title = ?, content = ?, folder = ?, tags = ?,
 		updated_at = datetime('now') WHERE rowid = ?`,
 		note.Title, note.Content, note.Folder, strings.Join(note.Tags, ","), id)
@@ -472,6 +487,11 @@ func (a *App) UpdateNote(id int64, note Note) error {
 	if count == 0 {
 		return sql.ErrNoRows
 	}
+	if titleChanged {
+		if err := rewriteIncomingLinks(tx, id, note.Title, byPath, byTitle); err != nil {
+			return err
+		}
+	}
 	if err := replaceNoteLinks(tx, id, note.Content); err != nil {
 		return err
 	}
@@ -483,7 +503,16 @@ func (a *App) MoveNoteFolder(id int64, folder string) error {
 	if err != nil || normalized != folder {
 		return errors.New("folder must be a normalized relative path")
 	}
-	result, err := a.db.Exec(`UPDATE notes SET folder = ?, updated_at = datetime('now') WHERE rowid = ?`, folder, id)
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	before, err := readNotesForLinksWith(tx)
+	if err != nil {
+		return err
+	}
+	result, err := tx.Exec(`UPDATE notes SET folder = ?, updated_at = datetime('now') WHERE rowid = ?`, folder, id)
 	if err != nil {
 		return err
 	}
@@ -494,7 +523,14 @@ func (a *App) MoveNoteFolder(id int64, folder string) error {
 	if count == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+	after, err := readNotesForLinksWith(tx)
+	if err != nil {
+		return err
+	}
+	if err := relinkNotesAfterMove(tx, before, after); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (a *App) MoveFolder(source, target string) (string, int64, error) {
@@ -527,6 +563,10 @@ func (a *App) MoveFolder(source, target string) (string, int64, error) {
 		return "", 0, err
 	}
 	defer tx.Rollback()
+	before, err := readNotesForLinksWith(tx)
+	if err != nil {
+		return "", 0, err
+	}
 
 	var count int64
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM notes
@@ -550,6 +590,13 @@ func (a *App) MoveFolder(source, target string) (string, int64, error) {
 		updated_at = datetime('now')
 		WHERE folder = ? OR substr(folder, 1, length(?) + 1) = ? || '/'`,
 		destination, source, source, source, source); err != nil {
+		return "", 0, err
+	}
+	after, err := readNotesForLinksWith(tx)
+	if err != nil {
+		return "", 0, err
+	}
+	if err := relinkNotesAfterMove(tx, before, after); err != nil {
 		return "", 0, err
 	}
 	if err := tx.Commit(); err != nil {

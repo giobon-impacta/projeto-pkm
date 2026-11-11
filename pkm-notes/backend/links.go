@@ -20,6 +20,8 @@ import (
 var wikilinkPattern = regexp.MustCompile(`\[\[([^\]|]+)(?:\|[^\]]*)?\]\]`)
 var wikilinkPreviewPattern = regexp.MustCompile(`\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`)
 var inlineCodePattern = regexp.MustCompile("`+[^`\\n]*`+")
+var markdownInlineLinkPattern = regexp.MustCompile(`(!?\[[^\]\n]*\]\()(<[^>\n]*>|(?:[^()\s]|\([^()\s]*\))+)((?:\s+(?:"[^"]*"|'[^']*'))?\))`)
+var markdownLinkDefinitionPattern = regexp.MustCompile(`^(\s{0,3}\[[^\]\n]+\]:\s*)(<[^>\n]*>|\S+)(.*)$`)
 
 type GraphNode struct {
 	ID     int64  `json:"id"`
@@ -251,8 +253,16 @@ func (a *App) Backlinks(noteID int64) ([]NoteSummary, error) {
 	return result, nil
 }
 
+type noteQueryer interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+}
+
 func (a *App) readNotesForLinks() ([]indexedNote, error) {
-	rows, err := a.db.Query(`SELECT rowid, title, COALESCE(folder, '') FROM notes`)
+	return readNotesForLinksWith(a.db)
+}
+
+func readNotesForLinksWith(queryer noteQueryer) ([]indexedNote, error) {
+	rows, err := queryer.Query(`SELECT rowid, title, COALESCE(folder, '') FROM notes ORDER BY rowid`)
 	if err != nil {
 		return nil, err
 	}
@@ -337,6 +347,584 @@ func replaceNoteLinks(tx *sql.Tx, sourceID int64, content string) error {
 	return nil
 }
 
+// rewriteIncomingLinks updates the source notes that referenced the renamed
+// note before the update. Titles stored in note_links are raw, so renaming a
+// note would otherwise leave every title-based link dangling.
+func rewriteIncomingLinks(tx *sql.Tx, noteID int64, newTitle string, byPath, byTitle map[string]int64) error {
+	rows, err := tx.Query(`SELECT l.source_id, l.target_key, n.title, COALESCE(n.folder, '')
+		FROM note_links l JOIN notes n ON n.rowid = l.source_id
+		WHERE l.source_id != ?`, noteID)
+	if err != nil {
+		return err
+	}
+	sources := make(map[int64]indexedNote)
+	for rows.Next() {
+		var sourceID int64
+		var targetKey, title, folder string
+		if err := rows.Scan(&sourceID, &targetKey, &title, &folder); err != nil {
+			rows.Close()
+			return err
+		}
+		source := indexedNote{GraphNode: GraphNode{ID: sourceID, Title: title, Folder: folder}}
+		if resolveNoteLink(source, targetKey, byPath, byTitle) == noteID {
+			sources[sourceID] = source
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	ids := make([]int64, 0, len(sources))
+	for id := range sources {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	for _, id := range ids {
+		var content string
+		if err := tx.QueryRow("SELECT COALESCE(content, '') FROM notes WHERE rowid = ?", id).
+			Scan(&content); err != nil {
+			return err
+		}
+		rewritten, changed := rewriteLinksForRename(content, sources[id], noteID, newTitle, byPath, byTitle)
+		if !changed {
+			continue
+		}
+		if _, err := tx.Exec(`UPDATE notes SET content = ?, updated_at = datetime('now')
+			WHERE rowid = ?`, rewritten, id); err != nil {
+			return err
+		}
+		if err := replaceNoteLinks(tx, id, rewritten); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rewriteLinksForRename(content string, source indexedNote, noteID int64, newTitle string, byPath, byTitle map[string]int64) (string, bool) {
+	return rewriteContentOutsideCode(content,
+		func(line string) (string, bool) {
+			return rewriteLinkDefinitionLine(line, source, noteID, newTitle, byPath, byTitle)
+		},
+		func(segment string) (string, bool) {
+			return rewriteLinksInText(segment, source, noteID, newTitle, byPath, byTitle)
+		})
+}
+
+type linkTextRewriter func(string) (string, bool)
+
+// rewriteContentOutsideCode applies rewriteLine to each line outside fenced
+// code blocks and rewriteSegment to the parts of that line that are not inline
+// code. It keeps the original line endings and code untouched.
+func rewriteContentOutsideCode(content string, rewriteLine, rewriteSegment linkTextRewriter) (string, bool) {
+	lines := strings.Split(content, "\n")
+	var result strings.Builder
+	var fenceChar byte
+	fenceLength := 0
+	changed := false
+	for index, line := range lines {
+		if index > 0 {
+			result.WriteByte('\n')
+		}
+		trimmed := strings.TrimSpace(line)
+		if marker := markdownFence(trimmed); marker != "" {
+			if fenceChar == 0 {
+				fenceChar = marker[0]
+				fenceLength = len(marker)
+			} else if marker[0] == fenceChar && len(marker) >= fenceLength {
+				fenceChar = 0
+				fenceLength = 0
+			}
+			result.WriteString(line)
+			continue
+		}
+		if fenceChar != 0 {
+			result.WriteString(line)
+			continue
+		}
+		if rewriteLine != nil {
+			rewrittenLine, lineChanged := rewriteLine(line)
+			line = rewrittenLine
+			changed = changed || lineChanged
+		}
+		matches := inlineCodePattern.FindAllStringIndex(line, -1)
+		cursor := 0
+		for _, match := range matches {
+			if rewriteSegment != nil {
+				rewritten, segmentChanged := rewriteSegment(line[cursor:match[0]])
+				result.WriteString(rewritten)
+				changed = changed || segmentChanged
+			} else {
+				result.WriteString(line[cursor:match[0]])
+			}
+			result.WriteString(line[match[0]:match[1]])
+			cursor = match[1]
+		}
+		if rewriteSegment != nil {
+			rewritten, segmentChanged := rewriteSegment(line[cursor:])
+			result.WriteString(rewritten)
+			changed = changed || segmentChanged
+		} else {
+			result.WriteString(line[cursor:])
+		}
+	}
+	if !changed {
+		return content, false
+	}
+	return result.String(), true
+}
+
+func rewriteLinksInText(value string, source indexedNote, noteID int64, newTitle string, byPath, byTitle map[string]int64) (string, bool) {
+	value, wikilinkChanged := rewriteWikilinksInText(value, source, noteID, newTitle, byPath, byTitle)
+	value, markdownChanged := rewriteMarkdownLinksInText(value, source, noteID, newTitle, byPath, byTitle)
+	return value, wikilinkChanged || markdownChanged
+}
+
+func rewriteWikilinksInText(value string, source indexedNote, noteID int64, newTitle string, byPath, byTitle map[string]int64) (string, bool) {
+	matches := wikilinkPreviewPattern.FindAllStringSubmatchIndex(value, -1)
+	if len(matches) == 0 {
+		return value, false
+	}
+	var result strings.Builder
+	cursor := 0
+	changed := false
+	for _, match := range matches {
+		rawTarget := value[match[2]:match[3]]
+		if resolveNoteLink(source, strings.TrimSpace(rawTarget), byPath, byTitle) != noteID {
+			continue
+		}
+		replacement := renameLinkTarget(rawTarget, newTitle, false)
+		if replacement == rawTarget {
+			continue
+		}
+		result.WriteString(value[cursor:match[2]])
+		result.WriteString(replacement)
+		cursor = match[3]
+		changed = true
+	}
+	if !changed {
+		return value, false
+	}
+	result.WriteString(value[cursor:])
+	return result.String(), true
+}
+
+func rewriteMarkdownLinksInText(value string, source indexedNote, noteID int64, newTitle string, byPath, byTitle map[string]int64) (string, bool) {
+	matches := markdownInlineLinkPattern.FindAllStringSubmatchIndex(value, -1)
+	if len(matches) == 0 {
+		return value, false
+	}
+	var result strings.Builder
+	cursor := 0
+	changed := false
+	for _, match := range matches {
+		rawDestination := value[match[4]:match[5]]
+		destination := rawDestination
+		angleBracketed := strings.HasPrefix(destination, "<") && strings.HasSuffix(destination, ">")
+		if angleBracketed {
+			destination = destination[1 : len(destination)-1]
+		}
+		if resolveNoteLink(source, destination, byPath, byTitle) != noteID {
+			continue
+		}
+		replacement := renameLinkTarget(destination, newTitle, !angleBracketed)
+		if angleBracketed {
+			replacement = "<" + replacement + ">"
+		}
+		if replacement == rawDestination {
+			continue
+		}
+		result.WriteString(value[cursor:match[4]])
+		result.WriteString(replacement)
+		cursor = match[5]
+		changed = true
+	}
+	if !changed {
+		return value, false
+	}
+	result.WriteString(value[cursor:])
+	return result.String(), true
+}
+
+func rewriteLinkDefinitionLine(line string, source indexedNote, noteID int64, newTitle string, byPath, byTitle map[string]int64) (string, bool) {
+	match := markdownLinkDefinitionPattern.FindStringSubmatchIndex(line)
+	if match == nil {
+		return line, false
+	}
+	rawDestination := line[match[4]:match[5]]
+	destination := rawDestination
+	angleBracketed := strings.HasPrefix(destination, "<") && strings.HasSuffix(destination, ">")
+	if angleBracketed {
+		destination = destination[1 : len(destination)-1]
+	}
+	if resolveNoteLink(source, destination, byPath, byTitle) != noteID {
+		return line, false
+	}
+	replacement := renameLinkTarget(destination, newTitle, !angleBracketed)
+	if angleBracketed {
+		replacement = "<" + replacement + ">"
+	}
+	if replacement == rawDestination {
+		return line, false
+	}
+	return line[:match[4]] + replacement + line[match[5]:], true
+}
+
+// renameLinkTarget keeps the shape of the original target: surrounding
+// whitespace, folder prefix, .md extension, fragment and query string.
+func renameLinkTarget(raw, newTitle string, escape bool) string {
+	leading := raw[:len(raw)-len(strings.TrimLeft(raw, " "))]
+	trailing := raw[len(strings.TrimRight(raw, " ")):]
+	target := strings.TrimSpace(raw)
+
+	suffix := ""
+	if index := strings.IndexAny(target, "?#"); index >= 0 {
+		suffix = target[index:]
+		target = target[:index]
+	}
+	extension := ""
+	if strings.HasSuffix(strings.ToLower(target), ".md") {
+		extension = target[len(target)-3:]
+		target = target[:len(target)-3]
+	}
+	directory := ""
+	if slash := strings.LastIndex(target, "/"); slash >= 0 {
+		directory = target[:slash+1]
+	}
+	segment := newTitle
+	if escape {
+		segment = escapeLinkDestination(segment)
+	}
+	return leading + directory + segment + extension + suffix + trailing
+}
+
+func escapeLinkDestination(value string) string {
+	if strings.ContainsAny(value, " \t()<>#?%") {
+		return url.PathEscape(value)
+	}
+	return value
+}
+
+// relinkNotesAfterMove keeps the meaning of path-based links across folder
+// moves. It compares the resolution before and after the move and rewrites
+// only the targets that would otherwise resolve to another note or nothing.
+func relinkNotesAfterMove(tx *sql.Tx, before, after []indexedNote) error {
+	oldByPath, oldByTitle := makeNoteLinkIndexes(before)
+	newByPath, newByTitle := makeNoteLinkIndexes(after)
+	oldNotes := make(map[int64]indexedNote, len(before))
+	for _, note := range before {
+		oldNotes[note.ID] = note
+	}
+	newNotes := make(map[int64]indexedNote, len(after))
+	for _, note := range after {
+		newNotes[note.ID] = note
+	}
+
+	rows, err := tx.Query(`SELECT source_id, target_key FROM note_links ORDER BY source_id, target_key`)
+	if err != nil {
+		return err
+	}
+	affected := make(map[int64]struct{})
+	for rows.Next() {
+		var sourceID int64
+		var targetKey string
+		if err := rows.Scan(&sourceID, &targetKey); err != nil {
+			rows.Close()
+			return err
+		}
+		oldSource, exists := oldNotes[sourceID]
+		if !exists {
+			continue
+		}
+		oldTargetID := resolveNoteLink(oldSource, targetKey, oldByPath, oldByTitle)
+		if oldTargetID == 0 {
+			continue
+		}
+		newSource, exists := newNotes[sourceID]
+		if !exists {
+			continue
+		}
+		newTarget, exists := newNotes[oldTargetID]
+		if !exists {
+			continue
+		}
+		if pathStyleTarget(targetKey) {
+			if oldSource.Folder != newSource.Folder || oldNotes[oldTargetID].Folder != newTarget.Folder {
+				affected[sourceID] = struct{}{}
+			}
+			continue
+		}
+		if resolveNoteLink(newSource, targetKey, newByPath, newByTitle) == oldTargetID {
+			continue
+		}
+		affected[sourceID] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	ids := make([]int64, 0, len(affected))
+	for id := range affected {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	for _, id := range ids {
+		var content string
+		if err := tx.QueryRow("SELECT COALESCE(content, '') FROM notes WHERE rowid = ?", id).
+			Scan(&content); err != nil {
+			return err
+		}
+		rewritten, changed := rewriteLinksForMove(content, oldNotes[id], newNotes[id],
+			oldByPath, oldByTitle, newByPath, newByTitle, oldNotes, newNotes)
+		if !changed {
+			continue
+		}
+		if _, err := tx.Exec(`UPDATE notes SET content = ?, updated_at = datetime('now')
+			WHERE rowid = ?`, rewritten, id); err != nil {
+			return err
+		}
+		if err := replaceNoteLinks(tx, id, rewritten); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rewriteLinksForMove(content string, oldSource, newSource indexedNote, oldByPath, oldByTitle, newByPath, newByTitle map[string]int64, oldNotes, newNotes map[int64]indexedNote) (string, bool) {
+	return rewriteContentOutsideCode(content,
+		func(line string) (string, bool) {
+			return rewriteLinkDefinitionLineForMove(line, oldSource, newSource,
+				oldByPath, oldByTitle, newByPath, newByTitle, oldNotes, newNotes)
+		},
+		func(segment string) (string, bool) {
+			return rewriteLinksInTextForMove(segment, oldSource, newSource,
+				oldByPath, oldByTitle, newByPath, newByTitle, oldNotes, newNotes)
+		})
+}
+
+func rewriteLinksInTextForMove(value string, oldSource, newSource indexedNote, oldByPath, oldByTitle, newByPath, newByTitle map[string]int64, oldNotes, newNotes map[int64]indexedNote) (string, bool) {
+	value, wikilinkChanged := rewriteWikilinksInTextForMove(value, oldSource, newSource,
+		oldByPath, oldByTitle, newByPath, newByTitle, oldNotes, newNotes)
+	value, markdownChanged := rewriteMarkdownLinksInTextForMove(value, oldSource, newSource,
+		oldByPath, oldByTitle, newByPath, newByTitle, oldNotes, newNotes)
+	return value, wikilinkChanged || markdownChanged
+}
+
+func rewriteWikilinksInTextForMove(value string, oldSource, newSource indexedNote, oldByPath, oldByTitle, newByPath, newByTitle map[string]int64, oldNotes, newNotes map[int64]indexedNote) (string, bool) {
+	matches := wikilinkPreviewPattern.FindAllStringSubmatchIndex(value, -1)
+	if len(matches) == 0 {
+		return value, false
+	}
+	var result strings.Builder
+	cursor := 0
+	changed := false
+	for _, match := range matches {
+		rawTarget := value[match[2]:match[3]]
+		target := strings.TrimSpace(rawTarget)
+		oldTargetID := resolveNoteLink(oldSource, target, oldByPath, oldByTitle)
+		newTarget, needsRelink := linkMoveInfo(target, oldSource, newSource, oldTargetID,
+			oldByPath, oldByTitle, newByPath, newByTitle, oldNotes, newNotes)
+		if oldTargetID == 0 || !needsRelink {
+			continue
+		}
+		replacement := movedLinkTarget(rawTarget, newSource, newTarget, false)
+		if replacement == rawTarget {
+			continue
+		}
+		result.WriteString(value[cursor:match[2]])
+		result.WriteString(replacement)
+		cursor = match[3]
+		changed = true
+	}
+	if !changed {
+		return value, false
+	}
+	result.WriteString(value[cursor:])
+	return result.String(), true
+}
+
+func rewriteMarkdownLinksInTextForMove(value string, oldSource, newSource indexedNote, oldByPath, oldByTitle, newByPath, newByTitle map[string]int64, oldNotes, newNotes map[int64]indexedNote) (string, bool) {
+	matches := markdownInlineLinkPattern.FindAllStringSubmatchIndex(value, -1)
+	if len(matches) == 0 {
+		return value, false
+	}
+	var result strings.Builder
+	cursor := 0
+	changed := false
+	for _, match := range matches {
+		rawDestination := value[match[4]:match[5]]
+		destination := rawDestination
+		angleBracketed := strings.HasPrefix(destination, "<") && strings.HasSuffix(destination, ">")
+		if angleBracketed {
+			destination = destination[1 : len(destination)-1]
+		}
+		oldTargetID := resolveNoteLink(oldSource, destination, oldByPath, oldByTitle)
+		newTarget, needsRelink := linkMoveInfo(destination, oldSource, newSource, oldTargetID,
+			oldByPath, oldByTitle, newByPath, newByTitle, oldNotes, newNotes)
+		if oldTargetID == 0 || !needsRelink {
+			continue
+		}
+		replacement := movedLinkTarget(destination, newSource, newTarget, !angleBracketed)
+		if angleBracketed {
+			replacement = "<" + replacement + ">"
+		}
+		if replacement == rawDestination {
+			continue
+		}
+		result.WriteString(value[cursor:match[4]])
+		result.WriteString(replacement)
+		cursor = match[5]
+		changed = true
+	}
+	if !changed {
+		return value, false
+	}
+	result.WriteString(value[cursor:])
+	return result.String(), true
+}
+
+func rewriteLinkDefinitionLineForMove(line string, oldSource, newSource indexedNote, oldByPath, oldByTitle, newByPath, newByTitle map[string]int64, oldNotes, newNotes map[int64]indexedNote) (string, bool) {
+	match := markdownLinkDefinitionPattern.FindStringSubmatchIndex(line)
+	if match == nil {
+		return line, false
+	}
+	rawDestination := line[match[4]:match[5]]
+	destination := rawDestination
+	angleBracketed := strings.HasPrefix(destination, "<") && strings.HasSuffix(destination, ">")
+	if angleBracketed {
+		destination = destination[1 : len(destination)-1]
+	}
+	oldTargetID := resolveNoteLink(oldSource, destination, oldByPath, oldByTitle)
+	newTarget, needsRelink := linkMoveInfo(destination, oldSource, newSource, oldTargetID,
+		oldByPath, oldByTitle, newByPath, newByTitle, oldNotes, newNotes)
+	if oldTargetID == 0 || !needsRelink {
+		return line, false
+	}
+	replacement := movedLinkTarget(destination, newSource, newTarget, !angleBracketed)
+	if angleBracketed {
+		replacement = "<" + replacement + ">"
+	}
+	if replacement == rawDestination {
+		return line, false
+	}
+	return line[:match[4]] + replacement + line[match[5]:], true
+}
+
+// linkMoveInfo decides whether a link must be rewritten after a move. Path
+// targets are rebased whenever the source or the target changed folders, even
+// if the old path still resolves through the title fallback. Title-only
+// targets are only rewritten when their resolution actually changed, which
+// happens when a duplicate title starts shadowing the original note.
+func linkMoveInfo(target string, oldSource, newSource indexedNote, oldTargetID int64, oldByPath, oldByTitle, newByPath, newByTitle map[string]int64, oldNotes, newNotes map[int64]indexedNote) (indexedNote, bool) {
+	if oldTargetID == 0 {
+		return indexedNote{}, false
+	}
+	oldTarget, exists := oldNotes[oldTargetID]
+	if !exists {
+		return indexedNote{}, false
+	}
+	newTarget, exists := newNotes[oldTargetID]
+	if !exists {
+		return indexedNote{}, false
+	}
+	if pathStyleTarget(target) {
+		if oldSource.Folder == newSource.Folder && oldTarget.Folder == newTarget.Folder {
+			return indexedNote{}, false
+		}
+		return newTarget, true
+	}
+	if resolveNoteLink(newSource, target, newByPath, newByTitle) == oldTargetID {
+		return indexedNote{}, false
+	}
+	return newTarget, true
+}
+
+func pathStyleTarget(target string) bool {
+	core := target
+	if index := strings.IndexAny(core, "?#"); index >= 0 {
+		core = core[:index]
+	}
+	return strings.Contains(core, "/")
+}
+
+// movedLinkTarget builds a target that still points to newTarget from the new
+// location of the source note, preserving the original shape (title-only,
+// relative or absolute path, .md extension, fragment and query string).
+func movedLinkTarget(raw string, newSource, newTarget indexedNote, escape bool) string {
+	leading := raw[:len(raw)-len(strings.TrimLeft(raw, " "))]
+	trailing := raw[len(strings.TrimRight(raw, " ")):]
+	target := strings.TrimSpace(raw)
+
+	suffix := ""
+	if index := strings.IndexAny(target, "?#"); index >= 0 {
+		suffix = target[index:]
+		target = target[:index]
+	}
+	extension := ""
+	if strings.HasSuffix(strings.ToLower(target), ".md") {
+		extension = target[len(target)-3:]
+		target = target[:len(target)-3]
+	}
+
+	fullPath := path.Join(newTarget.Folder, newTarget.Title)
+	absolute := strings.HasPrefix(target, "/")
+	relativePrefix := strings.HasPrefix(target, "./")
+	var destination string
+	if absolute {
+		destination = "/" + fullPath
+	} else {
+		destination = relativeNotePath(newSource.Folder, fullPath)
+		if relativePrefix {
+			destination = "./" + destination
+		}
+	}
+	if escape {
+		destination = escapeLinkPath(destination)
+	}
+	return leading + destination + extension + suffix + trailing
+}
+
+func relativeNotePath(fromFolder, targetPath string) string {
+	from := make([]string, 0)
+	if fromFolder != "" {
+		from = strings.Split(fromFolder, "/")
+	}
+	to := strings.Split(targetPath, "/")
+	common := 0
+	for common < len(from) && common < len(to) && from[common] == to[common] {
+		common++
+	}
+	parts := make([]string, 0, len(from)-common+len(to)-common)
+	for index := common; index < len(from); index++ {
+		parts = append(parts, "..")
+	}
+	parts = append(parts, to[common:]...)
+	if len(parts) == 0 {
+		return path.Base(targetPath)
+	}
+	return path.Join(parts...)
+}
+
+func escapeLinkPath(value string) string {
+	parts := strings.Split(value, "/")
+	for index, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			continue
+		}
+		parts[index] = escapeLinkDestination(part)
+	}
+	return strings.Join(parts, "/")
+}
+
 func stripCodeForWikilinks(content string) string {
 	lines := strings.Split(content, "\n")
 	var result strings.Builder
@@ -401,6 +989,10 @@ func resolveNoteLink(source indexedNote, rawTarget string, byPath, byTitle map[s
 		}
 	}
 	if target == "" {
+		return 0
+	}
+	// Attachment and API URLs live in the same origin but are not notes.
+	if strings.HasPrefix(target, "/api/") {
 		return 0
 	}
 	target = strings.TrimPrefix(target, "/")

@@ -942,6 +942,35 @@ function updateEditorBreadcrumb() {
     elements.noteTitle.title = elements.noteTitle.value || 'Título da nota';
 }
 
+// Moving a note or folder can rewrite links in the note that is currently
+// open. Reload it when the local draft is clean so the editor does not save
+// the stale content over the server-side fix.
+async function refreshOpenNoteAfterMove() {
+    if (state.view !== 'editor' || state.noteID === null || isDraftDirty()) return;
+    const id = state.noteID;
+    try {
+        const note = await requestJSON(`/api/notes/${id}`);
+        if (state.view !== 'editor' || state.noteID !== id || isDraftDirty()) return;
+        state.noteFolder = note.folder;
+        const content = ensureFrontmatterTags(note.content, note.tags || []);
+        if (content !== elements.noteContent.value) {
+            elements.noteContent.value = content;
+            state.savedDraft = getDraft();
+            markdownEditor.setValue(content);
+            renderedPreviewMarkdown = '';
+            editorLinePositionCache = null;
+            state.outline = extractMarkdownOutline(content);
+            updateOutlineCount();
+            updatePreview();
+        }
+        state.savedDraft = getDraft();
+        updateEditorBreadcrumb();
+        void loadBacklinks(id);
+    } catch (error) {
+        // The move itself succeeded; keep the local editor state on failure.
+    }
+}
+
 function getDraft() {
     return {
         title: elements.noteTitle.value,
@@ -2190,7 +2219,7 @@ async function handleSidebarDrop(event) {
 
 async function moveNoteToFolder(noteID, folder) {
     try {
-        if (state.view === 'editor' && state.noteID === noteID && !(await flushSave())) return;
+        if (state.view === 'editor' && !(await flushSave())) return;
         await requestJSON(`/api/notes/${noteID}/folder`, {
             method: 'PATCH',
             body: JSON.stringify({ folder })
@@ -2201,6 +2230,7 @@ async function moveNoteToFolder(noteID, folder) {
             state.savedDraft = getDraft();
             updateEditorBreadcrumb();
         }
+        await refreshOpenNoteAfterMove();
         showMessage('Nota movida.', 'success');
         await refreshFolderTree();
         await loadNotes();
@@ -2211,9 +2241,7 @@ async function moveNoteToFolder(noteID, folder) {
 
 async function moveFolderToParent(source, target) {
     try {
-        if (state.view === 'editor' && state.noteFolder &&
-            (state.noteFolder === source || state.noteFolder.startsWith(`${source}/`)) &&
-            !(await flushSave())) return;
+        if (state.view === 'editor' && !(await flushSave())) return;
         const result = await requestJSON('/api/folders/move', {
             method: 'POST',
             body: JSON.stringify({ source, target })
@@ -2230,6 +2258,7 @@ async function moveFolderToParent(source, target) {
             const current = history.state || {};
             history.replaceState({ ...current, list: state.listState }, '', location.href);
         }
+        await refreshOpenNoteAfterMove();
         showMessage('Pasta movida.', 'success');
         updateListHistory();
         await refreshFolderTree();

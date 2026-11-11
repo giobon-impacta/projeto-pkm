@@ -339,31 +339,58 @@ func TestPersistedLinksFollowRenamesMovesAndUpdates(t *testing.T) {
 	if err := app.UpdateNote(targetID, Note{Title: "Renamed", Folder: "Projects"}); err != nil {
 		t.Fatal(err)
 	}
-	if edges := edgesFrom(sourceID); len(edges) != 1 || edges[otherID] != "markdown" {
-		t.Fatalf("renaming the target should drop the dangling wikilink: %#v", edges)
+	source, err := app.GetNote(sourceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source.Content != "[[Renamed]] [Other](../Reference/Other.md)" {
+		t.Fatalf("rename did not rewrite the incoming wikilink: %q", source.Content)
+	}
+	if edges := edgesFrom(sourceID); len(edges) != 2 ||
+		edges[targetID] != "wikilink" || edges[otherID] != "markdown" {
+		t.Fatalf("renaming the target should keep its wikilink: %#v", edges)
+	}
+	backlinks, err = app.Backlinks(targetID)
+	if err != nil || len(backlinks) != 1 || backlinks[0].ID != sourceID {
+		t.Fatalf("backlinks after rename: %#v err=%v", backlinks, err)
 	}
 
 	newTargetID, err := app.CreateNote(Note{Title: "Target", Folder: "Projects"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if edges := edgesFrom(sourceID); len(edges) != 2 || edges[newTargetID] != "wikilink" {
-		t.Fatalf("a new note with the missing title should make the link resolve again: %#v", edges)
+	if edges := edgesFrom(sourceID); len(edges) != 2 ||
+		edges[targetID] != "wikilink" || edges[otherID] != "markdown" {
+		t.Fatalf("the rewritten link must not resolve to another note: %#v", edges)
 	}
 
 	if err := app.MoveNoteFolder(sourceID, "Archive/Deep"); err != nil {
 		t.Fatal(err)
 	}
+	source, err = app.GetNote(sourceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source.Content != "[[Renamed]] [Other](../../Reference/Other.md)" {
+		t.Fatalf("moving the source did not rebase its relative markdown link: %q", source.Content)
+	}
 	if edges := edgesFrom(sourceID); len(edges) != 2 ||
-		edges[newTargetID] != "wikilink" || edges[movedOtherID] != "markdown" {
-		t.Fatalf("moving the source should change relative link resolution: %#v", edges)
+		edges[targetID] != "wikilink" || edges[otherID] != "markdown" || edges[movedOtherID] != "" {
+		t.Fatalf("moving the source should preserve the original markdown target: %#v", edges)
 	}
 	if err := app.MoveNoteFolder(sourceID, "Projects"); err != nil {
 		t.Fatal(err)
 	}
+	source, err = app.GetNote(sourceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source.Content != "[[Renamed]] [Other](../Reference/Other.md)" {
+		t.Fatalf("moving the source back did not restore its relative markdown link: %q", source.Content)
+	}
 	if edges := edgesFrom(sourceID); len(edges) != 2 ||
-		edges[newTargetID] != "wikilink" || edges[otherID] != "markdown" {
-		t.Fatalf("moving the source back should restore the original relative target: %#v", edges)
+		edges[targetID] != "wikilink" || edges[otherID] != "markdown" {
+		t.Fatalf("moving the source back should keep the original relative target: %#v", edges)
 	}
 
 	if err := app.UpdateNote(sourceID, Note{
@@ -398,6 +425,323 @@ func TestPersistedLinksFollowRenamesMovesAndUpdates(t *testing.T) {
 	}
 	if linkRows != 0 {
 		t.Fatalf("deleting a note should cascade to its link rows, got %d", linkRows)
+	}
+}
+
+func TestRenamePropagatesToWikilinkVariantsAndMarkdownLinks(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	targetID, err := app.CreateNote(Note{Title: "Target", Folder: "Projects"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Same title in another folder: path-based links must keep pointing here.
+	archiveTargetID, err := app.CreateNote(Note{Title: "Target", Folder: "Archive"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceID, err := app.CreateNote(Note{
+		Title:  "Source",
+		Folder: "Projects",
+		Content: strings.Join([]string{
+			"[[Target]]",
+			"[[Target|alias]]",
+			"[[Projects/Target]]",
+			"[[Target.md]]",
+			"[[Target#Section]]",
+			"[[Archive/Target]]",
+			"`[[Target]]`",
+			"```",
+			"[[Target]]",
+			"```",
+		}, "\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := app.UpdateNote(targetID, Note{Title: "Renamed Note", Folder: "Projects"}); err != nil {
+		t.Fatal(err)
+	}
+	source, err := app.GetNote(sourceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Join([]string{
+		"[[Renamed Note]]",
+		"[[Renamed Note|alias]]",
+		"[[Projects/Renamed Note]]",
+		"[[Renamed Note.md]]",
+		"[[Renamed Note#Section]]",
+		"[[Archive/Target]]",
+		"`[[Target]]`",
+		"```",
+		"[[Target]]",
+		"```",
+	}, "\n")
+	if source.Content != want {
+		t.Fatalf("unexpected renamed content:\n got: %q\nwant: %q", source.Content, want)
+	}
+
+	graph, err := app.NoteGraph()
+	if err != nil {
+		t.Fatal(err)
+	}
+	edges := make(map[int64]string)
+	for _, edge := range graph.Edges {
+		if edge.Source == sourceID {
+			edges[edge.Target] = edge.Type
+		}
+	}
+	if len(edges) != 2 || edges[targetID] != "wikilink" || edges[archiveTargetID] != "wikilink" {
+		t.Fatalf("unexpected edges after rename: %#v", edges)
+	}
+	backlinks, err := app.Backlinks(targetID)
+	if err != nil || len(backlinks) != 1 || backlinks[0].ID != sourceID {
+		t.Fatalf("unexpected backlinks after rename: %#v err=%v", backlinks, err)
+	}
+
+	otherID, err := app.CreateNote(Note{Title: "Other", Folder: "Reference"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	markdownSourceID, err := app.CreateNote(Note{
+		Title:  "Markdown Source",
+		Folder: "Notes",
+		Content: `[other](../Reference/Other.md) ![other](../Reference/Other.md "title")
+[ref]: ../Reference/Other.md`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.UpdateNote(otherID, Note{Title: "Outra Nota", Folder: "Reference"}); err != nil {
+		t.Fatal(err)
+	}
+	markdownSource, err := app.GetNote(markdownSourceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantMarkdown := `[other](../Reference/Outra%20Nota.md) ![other](../Reference/Outra%20Nota.md "title")
+[ref]: ../Reference/Outra%20Nota.md`
+	if markdownSource.Content != wantMarkdown {
+		t.Fatalf("unexpected renamed markdown links:\n got: %q\nwant: %q", markdownSource.Content, wantMarkdown)
+	}
+	backlinks, err = app.Backlinks(otherID)
+	if err != nil || len(backlinks) != 1 || backlinks[0].ID != markdownSourceID {
+		t.Fatalf("unexpected markdown backlinks after rename: %#v err=%v", backlinks, err)
+	}
+}
+
+func TestMovingNoteRebasesIncomingAndOutgoingLinks(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	targetID, err := app.CreateNote(Note{Title: "Moved", Folder: "Notes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceID, err := app.CreateNote(Note{
+		Title:  "Source",
+		Folder: "Notes",
+		Content: strings.Join([]string{
+			"[[Moved]]",
+			"[moved](Moved.md)",
+			"[outside](../Root/Outside.md)",
+		}, "\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	numericID, err := app.CreateNote(Note{Title: "2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outsideID, err := app.CreateNote(Note{
+		Title:  "Outside",
+		Folder: "Root",
+		Content: strings.Join([]string{
+			"[moved](../Notes/Moved.md)",
+			"[[/Notes/Moved|alias]]",
+			"[file](/api/notes/1/attachments/2)",
+		}, "\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := app.MoveNoteFolder(targetID, "Archive"); err != nil {
+		t.Fatal(err)
+	}
+	outside, err := app.GetNote(outsideID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantOutside := strings.Join([]string{
+		"[moved](../Archive/Moved.md)",
+		"[[/Archive/Moved|alias]]",
+		"[file](/api/notes/1/attachments/2)",
+	}, "\n")
+	if outside.Content != wantOutside {
+		t.Fatalf("incoming links were not rebased:\n got: %q\nwant: %q", outside.Content, wantOutside)
+	}
+	source, err := app.GetNote(sourceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSource := strings.Join([]string{
+		"[[Moved]]",
+		"[moved](Moved.md)",
+		"[outside](../Root/Outside.md)",
+	}, "\n")
+	if source.Content != wantSource {
+		t.Fatalf("title-only links should stay unchanged:\n got: %q\nwant: %q", source.Content, wantSource)
+	}
+
+	if err := app.MoveNoteFolder(sourceID, "Archive/Deep"); err != nil {
+		t.Fatal(err)
+	}
+	source, err = app.GetNote(sourceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSource = strings.Join([]string{
+		"[[Moved]]",
+		"[moved](Moved.md)",
+		"[outside](../../Root/Outside.md)",
+	}, "\n")
+	if source.Content != wantSource {
+		t.Fatalf("outgoing links were not rebased:\n got: %q\nwant: %q", source.Content, wantSource)
+	}
+
+	graph, err := app.NoteGraph()
+	if err != nil {
+		t.Fatal(err)
+	}
+	edges := make(map[[2]int64]map[string]bool)
+	for _, edge := range graph.Edges {
+		key := [2]int64{edge.Source, edge.Target}
+		if edges[key] == nil {
+			edges[key] = make(map[string]bool)
+		}
+		edges[key][edge.Type] = true
+	}
+	if !edges[[2]int64{sourceID, targetID}]["wikilink"] ||
+		!edges[[2]int64{sourceID, outsideID}]["markdown"] ||
+		!edges[[2]int64{outsideID, targetID}]["markdown"] ||
+		!edges[[2]int64{outsideID, targetID}]["wikilink"] {
+		t.Fatalf("unexpected edges after moves: %#v", graph.Edges)
+	}
+	if edges[[2]int64{outsideID, numericID}] != nil {
+		t.Fatalf("attachment URL was resolved as a note: %#v", graph.Edges)
+	}
+}
+
+func TestMovingFolderTreeRebasesLinks(t *testing.T) {
+	app, err := NewApp(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	aID, err := app.CreateNote(Note{
+		Title:  "A",
+		Folder: "Projects",
+		Content: strings.Join([]string{
+			"[[/Projects/B]]",
+			"[b](/Projects/B.md)",
+			"[outside](../Outside.md)",
+		}, "\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bID, err := app.CreateNote(Note{
+		Title:  "B",
+		Folder: "Projects",
+		Content: strings.Join([]string{
+			"[a](A.md)",
+			"[a-abs](/Projects/A.md)",
+		}, "\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outsideID, err := app.CreateNote(Note{
+		Title:  "Outside",
+		Folder: "",
+		Content: strings.Join([]string{
+			"[a](Projects/A.md)",
+			"[b](/Projects/B.md)",
+		}, "\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	destination, moved, err := app.MoveFolder("Projects", "Archive")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if destination != "Archive/Projects" || moved != 2 {
+		t.Fatalf("unexpected move result: destination=%q moved=%d", destination, moved)
+	}
+
+	a, err := app.GetNote(aID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantA := strings.Join([]string{
+		"[[/Archive/Projects/B]]",
+		"[b](/Archive/Projects/B.md)",
+		"[outside](../../Outside.md)",
+	}, "\n")
+	if a.Content != wantA {
+		t.Fatalf("unexpected moved A content:\n got: %q\nwant: %q", a.Content, wantA)
+	}
+
+	b, err := app.GetNote(bID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantB := strings.Join([]string{
+		"[a](A.md)",
+		"[a-abs](/Archive/Projects/A.md)",
+	}, "\n")
+	if b.Content != wantB {
+		t.Fatalf("unexpected moved B content:\n got: %q\nwant: %q", b.Content, wantB)
+	}
+
+	outside, err := app.GetNote(outsideID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantOutside := strings.Join([]string{
+		"[a](Archive/Projects/A.md)",
+		"[b](/Archive/Projects/B.md)",
+	}, "\n")
+	if outside.Content != wantOutside {
+		t.Fatalf("unexpected outside content:\n got: %q\nwant: %q", outside.Content, wantOutside)
+	}
+
+	graph, err := app.NoteGraph()
+	if err != nil {
+		t.Fatal(err)
+	}
+	edges := make(map[[2]int64]bool)
+	for _, edge := range graph.Edges {
+		edges[[2]int64{edge.Source, edge.Target}] = true
+	}
+	for _, pair := range [][2]int64{{aID, bID}, {aID, outsideID}, {bID, aID}, {outsideID, aID}, {outsideID, bID}} {
+		if !edges[pair] {
+			t.Fatalf("missing edge %v after folder move: %#v", pair, graph.Edges)
+		}
 	}
 }
 
