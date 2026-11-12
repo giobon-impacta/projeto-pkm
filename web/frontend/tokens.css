@@ -1,0 +1,117 @@
+/* Shared design tokens and local font faces. Loaded before styles.css. */
+
+@font-face {
+    font-family: "Inter";
+    src: url("/vendor/inter/InterVariable.woff2") format("woff2");
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Inter";
+    src: url("/vendor/inter/InterVariable-Italic.woff2") format("woff2");
+    font-style: italic;
+    font-weight: 100 900;
+    font-display: swap;
+}
+
+:root {
+    color-scheme: dark;
+
+    /* Color */
+    --bg: #0b0d12;
+    --surface: #11141b;
+    --surface-raised: #171b24;
+    --surface-hover: #1c2230;
+    --border: #282e3a;
+    --text: #e7eaf0;
+    --muted: #8b95a8;
+    --faint: #606b7f;
+    --accent: #70a7ff;
+    --accent-soft: #172a46;
+    --danger: #f27b82;
+    --success: #75c697;
+    --rail: #151922;
+    --accent-solid: #3a6fcc;
+    --accent-solid-hover: #3f74d1;
+    --accent-solid-border: #78a8ff;
+    --accent-contrast: #ffffff;
+    --focus-ring: var(--accent);
+    --selection-bg: color-mix(in srgb, var(--accent) 32%, transparent);
+    --scrollbar-thumb: color-mix(in srgb, var(--faint) 35%, transparent);
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--muted) 70%, transparent);
+    --graph-link: #70a7ff;
+    --graph-wikilink: #b28aff;
+
+    /* Typography */
+    --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --text-2xs: 10px;
+    --text-xs: 11px;
+    --text-sm: 12px;
+    --text-base: 13px;
+    --text-md: 14px;
+    --text-lg: 15px;
+    --text-xl: 18px;
+    --text-2xl: 20px;
+    --leading-tight: 1.3;
+    --leading-normal: 1.5;
+    --leading-relaxed: 1.7;
+
+    /* Spacing */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-7: 32px;
+    --space-8: 40px;
+    --space-9: 56px;
+
+    /* Radius */
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-control: 7px;
+    --radius-md: 8px;
+    --radius-card: 9px;
+    --radius-lg: 10px;
+    --radius-xl: 12px;
+    --radius-pill: 999px;
+
+    /* Elevation */
+    --shadow-sm: 0 1px 2px #0004;
+    --shadow-md: 0 8px 24px #0006;
+    --shadow-lg: 0 18px 60px #0008;
+
+    /* Motion */
+    --duration-fast: .16s;
+    --duration-normal: .24s;
+    --ease-standard: cubic-bezier(.2, .8, .2, 1);
+    --transition-colors:
+        color var(--duration-fast) var(--ease-standard),
+        background-color var(--duration-fast) var(--ease-standard),
+        border-color var(--duration-fast) var(--ease-standard);
+}
+
+:root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f3f5f8;
+    --surface: #ffffff;
+    --surface-raised: #f8f9fb;
+    --surface-hover: #edf2fa;
+    --border: #dce1e9;
+    --text: #202735;
+    --muted: #626d7e;
+    --faint: #8791a0;
+    --accent: #2868c8;
+    --accent-soft: #e7f0ff;
+    --danger: #c83e49;
+    --rail: #e9edf4;
+    --selection-bg: color-mix(in srgb, var(--accent) 22%, transparent);
+    --scrollbar-thumb: color-mix(in srgb, var(--faint) 40%, transparent);
+    --shadow-sm: 0 1px 2px #00000012;
+    --shadow-md: 0 8px 24px #00000018;
+    --shadow-lg: 0 18px 60px #0000002e;
+}

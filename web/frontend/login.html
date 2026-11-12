@@ -5,29 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0b0d12">
     <title>Entrar · PKM Notes</title>
-    <style>
-        :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #0b0d12; color: #e7eaf0; }
-        * { box-sizing: border-box; }
-        body { display: grid; min-height: 100vh; margin: 0; place-items: center; padding: 20px; }
-        form { display: grid; width: min(100%, 360px); gap: 14px; padding: 26px; border: 1px solid #282e3a; border-radius: 12px; background: #11141b; }
-        h1 { margin: 0; font-size: 20px; }
-        label { display: grid; gap: 7px; color: #8b95a8; font-size: 13px; }
-        input { min-height: 40px; border: 1px solid #282e3a; border-radius: 7px; padding: 0 10px; outline: 0; color: #e7eaf0; background: #0b0d12; font: inherit; }
-        input:focus { border-color: #70a7ff; }
-        button { min-height: 40px; border: 0; border-radius: 7px; color: #fff; background: #4b83e5; font: inherit; font-weight: 600; cursor: pointer; }
-        button:disabled { opacity: .6; cursor: wait; }
-        #message { min-height: 18px; margin: 0; color: #f27b82; font-size: 13px; }
-    </style>
+    <script>
+        (() => {
+            let theme = 'dark';
+            try { theme = localStorage.getItem('theme') === 'light' ? 'light' : 'dark'; } catch {}
+            document.documentElement.dataset.theme = theme;
+            document.querySelector('meta[name="theme-color"]').content = theme === 'light' ? '#f3f5f8' : '#0b0d12';
+        })();
+    </script>
+    <link rel="preload" href="/vendor/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/tokens.css">
+    <link rel="stylesheet" href="/login.css">
 </head>
 <body>
-    <form id="loginForm">
-        <h1>Entrar no PKM Notes</h1>
-        <label for="password">Senha
-            <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
-        </label>
-        <button type="submit">Entrar</button>
-        <p id="message" role="status" aria-live="polite"></p>
-    </form>
+    <main class="login-shell">
+        <header class="login-brand">
+            <span class="login-mark" aria-hidden="true">P</span>
+            <div>
+                <h1>PKM Notes</h1>
+                <p>Entre para acessar suas notas.</p>
+            </div>
+        </header>
+        <form id="loginForm" aria-label="Entrar no PKM Notes">
+            <label for="password">Senha
+                <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+            </label>
+            <button type="submit">Entrar</button>
+            <p id="message" role="status" aria-live="polite"></p>
+        </form>
+    </main>
     <script>
         const form = document.querySelector('#loginForm');
         const password = document.querySelector('#password');

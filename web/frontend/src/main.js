@@ -1,5 +1,5 @@
 import { requestJSON } from './lib/api-client.js';
-import { ensureFrontmatterTags, extractMarkdownOutline, frontmatterLineOffset, highlightMarkdown, MarkdownEditor, parseFrontmatter } from './lib/markdown-editor.js';
+import { ensureFrontmatterTags, extractMarkdownOutline, frontmatterLineOffset, highlightMarkdown, MarkdownEditor, parseFrontmatter, stripFrontmatter } from './lib/markdown-editor.js';
 import { GraphView } from './lib/graph-view.js';
 import { highlightCode } from './lib/syntax-highlight.js';
 import { getScrollSpacerHeight, mapEditorToPreview, mapPreviewToEditor } from './lib/scroll-sync.js';
@@ -1193,12 +1193,13 @@ function closeWikilinkAutocomplete() {
     elements.noteContent.removeAttribute('aria-activedescendant');
 }
 
-async function openNewNote() {
+async function openNewNote(folder = state.folder) {
     if (state.view === 'editor' && !(await flushSave())) return;
     if (state.view === 'list') state.listState = captureListState();
     history.pushState({ view: 'editor', noteId: null, list: state.listState, direct: false }, '', location.pathname);
     state.directEntry = false;
     showEditor(null);
+    state.noteFolder = folder;
 }
 
 async function openNote(id, { push = true } = {}) {
@@ -2449,6 +2450,25 @@ function makeExpandButton(folderPath, label) {
     return expand;
 }
 
+function createTreeDocumentIcon(className) {
+    const namespace = 'http://www.w3.org/2000/svg';
+    const icon = document.createElementNS(namespace, 'svg');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('aria-hidden', 'true');
+    icon.classList.add(className);
+    for (const [className, pathData] of [
+        ['tree-document-page', 'M5 2.5h8l4.5 4.5v15H5z'],
+        ['tree-document-fold', 'M13 2.5V7h4.5'],
+        ['tree-document-lines', 'M8 11h7m-7 3.5h7m-7 3.5h5']
+    ]) {
+        const path = document.createElementNS(namespace, 'path');
+        path.setAttribute('d', pathData);
+        path.classList.add(className);
+        icon.append(path);
+    }
+    return icon;
+}
+
 function buildFolderNode(folder) {
     const item = document.createElement('li');
     item.className = 'tree-node';
@@ -2461,9 +2481,30 @@ function buildFolderNode(folder) {
     select.dataset.folder = folder.path;
     select.dataset.dragFolder = folder.path;
     select.draggable = true;
-    select.textContent = folder.name;
+    const label = document.createElement('span');
+    label.className = 'tree-folder-label';
+    label.textContent = folder.name;
+    select.append(createTreeDocumentIcon('tree-folder-icon'), label);
     row.dataset.dropFolder = folder.path;
     row.append(select);
+    const actions = document.createElement('div');
+    actions.className = 'tree-folder-actions';
+    const createNote = document.createElement('button');
+    createNote.type = 'button';
+    createNote.className = 'icon-button tree-folder-action';
+    createNote.dataset.createNoteFolder = folder.path;
+    createNote.setAttribute('aria-label', `Criar nota em ${folder.path}`);
+    createNote.title = `Criar nota em ${folder.path}`;
+    createNote.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.75h8l4 4v12.5H6z"/><path d="M14 3.75v4h4M12 11v6m-3-3h6"/></svg>';
+    const createSubfolder = document.createElement('button');
+    createSubfolder.type = 'button';
+    createSubfolder.className = 'icon-button tree-folder-action';
+    createSubfolder.dataset.createSubfolder = folder.path;
+    createSubfolder.setAttribute('aria-label', `Criar subpasta em ${folder.path}`);
+    createSubfolder.title = `Criar subpasta em ${folder.path}`;
+    createSubfolder.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h6l2 2h9v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M16 11v6m-3-3h6"/></svg>';
+    actions.append(createNote, createSubfolder);
+    row.append(actions);
     item.append(row);
     if (state.expandedFolders.has(folder.path)) {
         const contents = document.createElement('ul');
@@ -2498,7 +2539,10 @@ function renderDirectNotes(folder, root) {
         button.dataset.dragNote = String(note.id);
         button.draggable = true;
         button.title = note.title;
-        button.textContent = note.title;
+        const label = document.createElement('span');
+        label.className = 'tree-note-label';
+        label.textContent = note.title;
+        button.append(createTreeDocumentIcon('tree-note-icon'), label);
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'tree-note-delete';
@@ -2529,6 +2573,16 @@ function renderDirectNotes(folder, root) {
 }
 
 function handlePanelClick(event) {
+    const createNoteFolder = event.target.closest('[data-create-note-folder]');
+    if (createNoteFolder) {
+        void openNewNote(createNoteFolder.dataset.createNoteFolder);
+        return;
+    }
+    const createSubfolder = event.target.closest('[data-create-subfolder]');
+    if (createSubfolder) {
+        void createFolder(createSubfolder.dataset.createSubfolder);
+        return;
+    }
     if (event.target.closest('[data-create-note]')) {
         void openNewNote();
         return;
@@ -2694,14 +2748,17 @@ async function refreshFolderTree() {
     await Promise.all(folders.map(folder => loadFolderNotes(folder)));
 }
 
-async function createFolder() {
-    const name = window.prompt('Nome da pasta (use / para criar subpastas):');
+async function createFolder(parent = '') {
+    const name = window.prompt(parent
+        ? `Nome da subpasta em “${parent}” (use / para criar níveis):`
+        : 'Nome da pasta (use / para criar subpastas):');
     if (name === null) return;
-    const folder = name.trim();
-    if (!folder) {
+    const folderName = name.trim();
+    if (!folderName) {
         showMessage('Informe um nome para a pasta.', 'error');
         return;
     }
+    const folder = parent ? `${parent}/${folderName}` : folderName;
     try {
         await requestJSON('/api/folders', {
             method: 'POST',

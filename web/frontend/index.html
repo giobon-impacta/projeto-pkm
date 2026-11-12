@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0b0d12">
     <title>PKM Notes</title>
+    <script>
+        (() => {
+            let theme = 'dark';
+            try { theme = localStorage.getItem('theme') === 'light' ? 'light' : 'dark'; } catch {}
+            document.documentElement.dataset.theme = theme;
+            document.querySelector('meta[name="theme-color"]').content = theme === 'light' ? '#f3f5f8' : '#0b0d12';
+        })();
+    </script>
+    <link rel="preload" href="/vendor/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/tokens.css">
     <link rel="stylesheet" href="/styles.css">
     <script src="/vendor/highlight.js/highlight.min.js"></script>
     <script type="module" src="/src/main.js"></script>
